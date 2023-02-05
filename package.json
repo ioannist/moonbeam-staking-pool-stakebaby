@@ -1,0 +1,25 @@
+{
+  "name": "moonbeam-staking-pool-stakebaby",
+  "version": "1.0.0",
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.6.0",
+    "@truffle/hdwallet-provider": "^2.0.8",
+    "bn.js": "^5.2.1",
+    "chai": "^4.3.7",
+    "chai-almost": "^1.0.1",
+    "chai-as-promised": "^7.1.1",
+    "chai-bn": "^0.3.1",
+    "dotenv": "^16.0.3",
+    "moonbeam-truffle-plugin": "^3.0.0",
+    "openzeppelin-solidity": "^4.6.0",
+    "solc": "^0.8.17",
+    "prettier": "^2.8.1",
+    "prettier-plugin-solidity": "^1.1.0",
+    "truffle": "^5.5.13",
+    "truffle-flattener": "^1.6.0",
+    "truffle-plugin-verify": "^0.5.25"
+  },
+  "scripts": {
+    "prettier": "prettier --write \"contracts/**/*.sol\""
+ }
+}
