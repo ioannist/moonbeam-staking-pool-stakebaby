@@ -279,7 +279,7 @@ interface ParachainStaking {
 
     /// @dev Cancel pending delegation request (already made in support of input by caller)
     /// @custom:selector c90eee83
-    /// @param candidate The address of the candidate
+    /// @param candidate The address of the candidate  
     function cancelDelegationRequest(address candidate) external;
 
     /// @dev Sets an auto-compound value for a delegation

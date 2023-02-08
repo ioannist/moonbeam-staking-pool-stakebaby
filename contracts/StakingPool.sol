@@ -3,11 +3,11 @@ pragma solidity ^0.8.3;
 
 // Import OpenZeppelin Contract
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./interfaces/StakingInterface.sol";
-import "./interfaces/Proxy.sol";
-import "./TokenLiquidStaking.sol";
-import "./Ledger.sol";
-import "./Claimable.sol";
+import { ParachainStaking } from "./interfaces/StakingInterface.sol";
+import { Proxy } from "./interfaces/Proxy.sol";
+import { TokenLiquidStaking } from "./TokenLiquidStaking.sol";
+import { Ledger } from "./Ledger.sol";
+import { Claimable } from "./Claimable.sol";
 
 contract StakingPool is ReentrancyGuard {
     address TOKEN_LIQUID_STAKING;
@@ -15,14 +15,8 @@ contract StakingPool is ReentrancyGuard {
     address LEDGER;
     address payable CLAIMABLE;
 
-    // Missing ledger index
-    uint256 internal constant LEDGER_N_FOUND = type(uint256).max;
     // If a pending undelegation request takes more than this rounds to be served, then inLiquidation -> true
     uint256 public constant LIQUIDATION_ROUND_THRESHOLD = 12 * 30;
-
-    // Missing collator index
-    uint256 internal constant N_FOUND = type(uint256).max;
-    uint256 constant collatorCount = 28;
 
     ParachainStaking staking;
     Proxy proxy;
@@ -152,10 +146,13 @@ contract StakingPool is ReentrancyGuard {
     }
 
     /**
-    @dev If an undelegation request takes longer than LIQUIDATION_ROUND_THRESHOLD rounds to be executed, then activate inLiquidation
+    @dev If an undelegation request takes longer than LIQUIDATION_ROUND_THRESHOLD rounds to be executed,
+    OR  if the collator is no longer a registered candidqte, then activate inLiquidation.
     */
     function activateInLiquidation() external {
-        require(Queue.peekFront(undelegationQueue).round + LIQUIDATION_ROUND_THRESHOLD < staking.round(), "COND_NOT_MET");
+        bool undelegationThresholdReached = Queue.peekFront(undelegationQueue).round + LIQUIDATION_ROUND_THRESHOLD < staking.round();
+        bool isNotCandidate = !staking.isCandidate(COLLATOR);
+        require(undelegationThresholdReached || isNotCandidate, "COND_NOT_MET");
         inLiquidation = true;
     }
 
@@ -349,6 +346,15 @@ contract StakingPool is ReentrancyGuard {
         ledger.delegateWithAutoCompound(_amount, _autoCompound);
     }
 
+    /**
+    @dev ANybody can execute undelegations on chain, so this method is mainly for future-proofing in case permissions change
+    */
+    function executeDelegationRequest(uint256 _ledgerIndex) external onlyCollatorProxy {
+        require(_ledgerIndex < ledgers.length, "INV_INDEX");
+        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        ledger.executeDelegationRequest();
+    }
+
     function executeMatureUndelegationRequests() external onlyCollatorProxy {
         for (uint256 i = 0; i < ledgers.length; i++) {
             address _ledger = ledgers[i];
@@ -366,8 +372,13 @@ contract StakingPool is ReentrancyGuard {
         lastRoundRebased = staking.round();
         uint256 underlying = _getUnderlying();
         uint256 lsTokens = tokenLiquidStaking.totalSupply();
-        underlyingPerLSToken = (underlying * 1 ether) / lsTokens;
-        lstokenPerUnderlying = (lsTokens * 1 ether) / underlying;
+        if (underlying == 0 || lsTokens == 0) {
+            underlyingPerLSToken = 1 ether;
+            lstokenPerUnderlying = 1 ether;
+        } else {
+            underlyingPerLSToken = (underlying * 1 ether) / lsTokens;
+            lstokenPerUnderlying = (lsTokens * 1 ether) / underlying;
+        }
     }
 
     function _addLedger() internal {
@@ -427,17 +438,6 @@ contract StakingPool is ReentrancyGuard {
         ledger.scheduleRevokeDelegation();
     }
 
-
-    function _getLedgerIndex(address _ledger) internal view returns (uint256) {
-        uint256 length = ledgers.length;
-        for (uint256 i = 0; i < length; ++i) {
-            if (ledgers[i] == _ledger) {
-                return i;
-            }
-        }
-        return LEDGER_N_FOUND;
-    }
-
     /**
     @dev Returns the total underlying (GLMR) this contract owns. To avoid double counting, the call must first check the execution status of all
     pending undelegations. Undelegation/revoke requests can be executed by anybody and outside the contract's methods, so the only way to
@@ -456,9 +456,6 @@ contract StakingPool is ReentrancyGuard {
         return poolFunds;
     }
 
-    //********************* OTHER METHODS  *********************/
-
-    receive() external payable {}
 }
 
 //********************* QUEUE *********************/

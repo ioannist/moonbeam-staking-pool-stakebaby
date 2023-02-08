@@ -37,34 +37,36 @@ contract Ledger {
         );
     }
 
-    function scheduleDelegatorBondLess(uint256 _toUndelegate)
-        external onlyStakingPool
-    {
-        staking.scheduleDelegatorBondLess(COLLATOR, _toUndelegate);
-    }
-
     function delegatorBondMore(uint256 _delegation)
         external onlyStakingPool
     {
         staking.delegatorBondMore(COLLATOR, _delegation);
     }
 
-    function cancelDelegationRequest() external onlyStakingPool {
-        staking.cancelDelegationRequest(COLLATOR);
-    }
 
+    function scheduleDelegatorBondLess(uint256 _toUndelegate)
+        external onlyStakingPool
+    {
+        staking.scheduleDelegatorBondLess(COLLATOR, _toUndelegate);
+    }
     function scheduleRevokeDelegation() external onlyStakingPool {
         // we cannot revoke members that have made the minimum deposits
         staking.scheduleRevokeDelegation(COLLATOR);
     }
 
+    
+    function cancelDelegationRequest() external onlyStakingPool {
+        staking.cancelDelegationRequest(COLLATOR);
+    }
+
     function setAutoCompound(
         uint8 _value
     ) external onlyStakingPool {
+        uint32 candidateAutoCompoundingDelegationCount = staking.candidateAutoCompoundingDelegationCount(COLLATOR);
         staking.setAutoCompound(
             COLLATOR,
             _value,
-            staking.candidateAutoCompoundingDelegationCount(COLLATOR),
+            candidateAutoCompoundingDelegationCount,
             staking.delegatorDelegationCount(address(this))
         );
     }
@@ -81,6 +83,10 @@ contract Ledger {
             staking.candidateAutoCompoundingDelegationCount(COLLATOR),
             staking.delegatorDelegationCount(address(this))
         );
+    }
+
+    function executeDelegationRequest() external onlyStakingPool {
+        staking.executeDelegationRequest(address(this), COLLATOR);
     }
 
     function withdraw(uint256 _amount) external onlyStakingPool {
