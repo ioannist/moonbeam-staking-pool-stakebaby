@@ -29,7 +29,7 @@ contract Ledger {
         staking.delegate(
                 _candidate,
                 _delegation,
-                staking.candidateDelegationCount(COLLATOR),
+                staking.candidateDelegationCount(_candidate),
                 staking.delegatorDelegationCount(address(this))
         );
     }

@@ -6,7 +6,6 @@ import "./interfaces/StakingInterface.sol";
 import "./TokenLiquidStaking.sol";
 
 contract Claimable {
-
     address STAKING_POOL;
 
     // Delegator claimable amounts
@@ -17,16 +16,17 @@ contract Claimable {
         _;
     }
 
-    function initialize(
-        address _stakingPool
-    ) external payable {
-        require(_stakingPool != address(0) && STAKING_POOL == address(0), "ALREADY_INIT");
+    function initialize(address _stakingPool) external payable {
+        require(
+            _stakingPool != address(0) && STAKING_POOL == address(0),
+            "ALREADY_INIT"
+        );
         STAKING_POOL = _stakingPool;
     }
 
-    function claim(address _delegator) external onlyStakingPool {
-        require(claimables[_delegator] > 0, "ZERO_CLAIM");
+    function claim(address _delegator) external {
         uint256 amount = claimables[_delegator];
+        require(amount > 0, "ZERO_CLAIM");
         claimables[_delegator] = 0;
         (bool sent, ) = _delegator.call{value: amount}("");
         require(sent, "TRANSFER_FAIL");
@@ -35,5 +35,4 @@ contract Claimable {
     function depositClaim(address _delegator) external payable onlyStakingPool {
         claimables[_delegator] += msg.value;
     }
-
 }

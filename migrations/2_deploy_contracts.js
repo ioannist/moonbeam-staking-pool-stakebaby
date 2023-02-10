@@ -1,19 +1,18 @@
 const StakingPool = artifacts.require("StakingPool");
 const TokenLiquidStaking = artifacts.require("TokenLiquidStaking");
+const Claimable = artifacts.require("Claimable.sol");
 
 module.exports = async (deployer, network, accounts) => {
 
   require('dotenv').config()
 
-  const _undelegationCollatorQueueMaxIter = process.env.UndelegationCollatorQueueMaxIter;
-  const _daoDelegationQueueMaxIter = process.env.DaoDelegationQueueMaxIter;
-  const _roundUnscheduledUndelegationsMaxIter = process.env.RoundUnscheduledUndelegationsMaxIter;
+  const _collator = process.env.Collator;
   const _tokenLiquidStakingInitialSupply = web3.utils.toWei(process.env.TokenLiquidStakingInitialSupply, "ether");
 
   const superior = accounts[0];
   console.log(`Superior is ${superior}`);
 
-  const ParachainStaking = '0x0000000000000000000000000000000000000800';
+  const _ParachainStaking = '0x0000000000000000000000000000000000000800';
 
   console.log(`Deploying TokenLiquidStaking`);
   let _TokenLiquidStaking, TLS;
@@ -37,17 +36,32 @@ module.exports = async (deployer, network, accounts) => {
     } catch { }
   }
 
+  console.log(`Deploying Claimable`);
+  let _Claimable, CA;
+  while (true) {
+    try {
+      await deployer.deploy(Claimable);
+      CA = await Claimable.deployed();
+      _Claimable = CA.address;
+      break;
+    } catch { }
+  }
+
   console.log(`Initializing StakingPool`);
   await SP.initialize(
-    ParachainStaking,
-    _DaoStaking,
+    _collator,
+    _ParachainStaking,
     _TokenLiquidStaking,
-    _MemberTreasury,
-    _undelegationCollatorQueueMaxIter,
-    _daoDelegationQueueMaxIter,
-    _roundUnscheduledUndelegationsMaxIter,
+    _Claimable,
     {value: _tokenLiquidStakingInitialSupply}
   );
+
+  console.log(`Initializing Claimable`);
+
+  await CA.initialize(_StakingPool)
+
+  console.log(`Initializing TokenLiquidStaking`)
+  await TLS.initialize(_StakingPool);
   
   console.log('Finished deploying and intializing contracts')
 

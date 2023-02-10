@@ -20,15 +20,12 @@ const privateKeysMoonriver = [
 ];
 
 const privateKeys = [
-   process.env.DAO_STAKING,
-   process.env.DAO_MEMBERS,
+   process.env.MANAGER,
+   process.env.OFFICER,
+   process.env.DELEGATOR_1,
+   process.env.DELEGATOR_2,
+   process.env.DELEGATOR_3,
    process.env.AGENT007_KEY,
-   process.env.MEMBER_1,
-   process.env.MEMBER_2,
-   process.env.MEMBER_3,
-   process.env.NONMEMBER_1,
-   process.env.NONMEMBER_2,
-   process.env.NONMEMBER_3,
    process.env.REWARDS
 ];
 

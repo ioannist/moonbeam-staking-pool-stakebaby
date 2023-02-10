@@ -306,7 +306,13 @@ contract Staking_mock is ParachainStaking {
         uint256 candidateDelegationCount,
         uint256 candidateAutoCompoundingDelegationCount,
         uint256 delegatorDelegationCount
-    ) external {}
+    ) external {
+        if (delegations[msg.sender][candidate] == 0) {
+            require(amount >= MINIMUM_DELEGATION, "DELEGATION_BELOW_MIN");
+        }
+        delegations[msg.sender][candidate] += amount;
+        totalDelegaitons[msg.sender] += amount;
+    }
 
     /// @notice DEPRECATED use batch util with scheduleRevokeDelegation for all delegations
     /// @dev Request to leave the set of delegators

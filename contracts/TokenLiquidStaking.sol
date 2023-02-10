@@ -9,7 +9,7 @@ contract TokenLiquidStaking is ERC20  {
 
     address payable STAKING_POOL;
 
-    constructor(uint256 initialSupply) ERC20("TokenLiquidStaking", "cdGLMR") 
+    constructor(uint256 initialSupply) ERC20("StakeBabyMOVR", "sbMOVR") 
     {
         _mint(msg.sender, initialSupply);
     }
@@ -20,8 +20,9 @@ contract TokenLiquidStaking is ERC20  {
         _;
     }
 
-    function initialize(address payable _stakingPool, address _daoStaking) external  {
+    function initialize(address payable _stakingPool) external  {
         require(_stakingPool != address(0) && STAKING_POOL == address(0), "ALREADY_INIT");
+        STAKING_POOL = _stakingPool;
     }
 
     function mintToAddress(address _to, uint256 _amount) public onlyStakingPool {

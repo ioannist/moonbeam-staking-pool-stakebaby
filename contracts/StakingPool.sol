@@ -57,18 +57,13 @@ contract StakingPool is ReentrancyGuard {
     Queue.QueueStorage public undelegationQueue;
 
     modifier onlyCollatorProxy() {
-        bool isProxy = proxy.isProxy(
-            COLLATOR,
-            msg.sender,
-            Proxy.ProxyType.Governance,
-            0
-        );
-        require(isProxy, "NOT_AUTH");
+        require(_isProxy(msg.sender), "NOT_AUTH");
         _;
     }
 
     modifier onlyComplianceOfficer() {
         require(msg.sender == COMPLIANCE_OFFICER, "NOT_AUTH");
+        _;
     }
 
     function initialize(
@@ -191,11 +186,10 @@ contract StakingPool is ReentrancyGuard {
 
     function withdrawFromLedgerInLiquidation(
         uint256 _ledgerIndex,
-        address _candidate,
         uint256 _amount
     ) external {
         require(inLiquidation, "NO_LIQ");
-        _withdrawFromLedger(_ledgerIndex, _candidate, _amount);
+        _withdrawFromLedger(_ledgerIndex, _amount);
     }
 
     function scheduleRevokeDelegationInLiquidation(uint256 _ledgerIndex, address _candidate)
@@ -208,6 +202,7 @@ contract StakingPool is ReentrancyGuard {
     function scheduleRevokeDelegationInUncompliance(uint256 _ledgerIndex, address _candidate)
         external onlyComplianceOfficer
     {
+        require(uncompliance, "IN_COMPLIANCE");
         _scheduleRevokeDelegation(_ledgerIndex, _candidate);
     }
 
@@ -345,6 +340,15 @@ contract StakingPool is ReentrancyGuard {
         _depositAndDelegate(_ledgerIndex, _candidate, _amount);
     }
 
+    function depositAndDelegateWithAutoCompound(
+        uint256 _ledgerIndex,
+        address _candidate,
+        uint256 _amount,
+        uint8 _autoCompound
+    ) external onlyCollatorProxy {
+        _depositAndDelegateWithAutoCompound(_ledgerIndex, _candidate, _amount, _autoCompound);
+    }
+
     function depositAndBondMore(
         uint256 _ledgerIndex,
         address _candidate,
@@ -368,11 +372,12 @@ contract StakingPool is ReentrancyGuard {
         _scheduleRevokeDelegation(_ledgerIndex, _candidate);
     }
 
-    function cancelDelegationRequest(address _candidate, uint256 _ledgerIndex)
+    function cancelDelegationRequest(uint256 _ledgerIndex, address _candidate)
         external
         onlyCollatorProxy
     {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
+        require(!uncompliance, "IN_UNCOMPLIANCE");
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
         ledger.cancelDelegationRequest(_candidate);
     }
@@ -403,6 +408,7 @@ contract StakingPool is ReentrancyGuard {
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
         ledger.delegateWithAutoCompound(_candidate, _amount, _autoCompound);
     }
+
 
     /**
     @dev Anybody can execute undelegations on chain, so this method is mainly for future-proofing in case permissions change
@@ -476,6 +482,20 @@ contract StakingPool is ReentrancyGuard {
         ledger.delegate(_candidate, _amount);
     }
 
+    function _depositAndDelegateWithAutoCompound(
+        uint256 _ledgerIndex,
+        address _candidate,
+        uint256 _amount,
+        uint8 _autoCompound
+    ) internal {
+        require(_ledgerIndex < ledgers.length, "INV_INDEX");
+        require(_amount <= pendingDelegation, "INV_AMOUNT");
+        pendingDelegation -= _amount;
+        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        ledger.deposit{value: _amount}();
+        ledger.delegateWithAutoCompound(_candidate, _amount, _autoCompound);
+    }
+
     function _depositAndBondMore(
         uint256 _ledgerIndex,
         address _candidate,
@@ -534,6 +554,15 @@ contract StakingPool is ReentrancyGuard {
         // these are funds that delegators have undelegated and waiting to get the underlying; because the corresponding LS tokens have been burnt;
         // pendingSchedulingUndelegation funds is a subset of reducible balance depending on whether the undelegations have been executed or not
         return poolFunds;
+    }
+    
+    function _isProxy(address _manager) internal view virtual returns(bool) {
+        return proxy.isProxy(
+            COLLATOR,
+            _manager,
+            Proxy.ProxyType.Governance,
+            0
+        );
     }
 }
 
@@ -604,11 +633,11 @@ library Queue {
         queue._data[++queue._last] = data;
     }
 
-    function pushFront(QueueStorage storage queue, WhoAmount calldata data)
+    /*function pushFront(QueueStorage storage queue, WhoAmount calldata data)
         public
     {
         queue._data[--queue._first] = data;
-    }
+    }*/
 
     /**
      * @dev Removes an element from the front of the queue and returns it. O(1)
@@ -623,14 +652,14 @@ library Queue {
         delete queue._data[queue._first++];
     }
 
-    function popBack(QueueStorage storage queue)
+    /*function popBack(QueueStorage storage queue)
         public
         isNotEmpty(queue)
         returns (WhoAmount memory data)
     {
         data = queue._data[queue._last];
         delete queue._data[queue._last--];
-    }
+    }*/
 
     /**
      * @dev Returns the data from the front of the queue, without removing it. O(1)
@@ -649,12 +678,12 @@ library Queue {
      * @dev Returns the data from the back of the queue. O(1)
      * @param queue QueueStorage struct from contract.
      */
-    function peekBack(QueueStorage storage queue)
+    /*function peekBack(QueueStorage storage queue)
         public
         view
         isNotEmpty(queue)
         returns (WhoAmount memory data)
     {
         return queue._data[queue._last];
-    }
+    }*/
 }
