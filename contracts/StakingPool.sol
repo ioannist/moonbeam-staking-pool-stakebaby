@@ -10,7 +10,6 @@ import {Ledger} from "./Ledger.sol";
 import {Claimable} from "./Claimable.sol";
 
 contract StakingPool is ReentrancyGuard {
-
     //Contract accounts
     address TOKEN_LIQUID_STAKING;
     address LEDGER;
@@ -192,16 +191,18 @@ contract StakingPool is ReentrancyGuard {
         _withdrawFromLedger(_ledgerIndex, _amount);
     }
 
-    function scheduleRevokeDelegationInLiquidation(uint256 _ledgerIndex, address _candidate)
-        external
-    {
+    function scheduleRevokeDelegationInLiquidation(
+        uint256 _ledgerIndex,
+        address _candidate
+    ) external {
         require(inLiquidation, "NO_LIQ");
         _scheduleRevokeDelegation(_ledgerIndex, _candidate);
     }
 
-    function scheduleRevokeDelegationInUncompliance(uint256 _ledgerIndex, address _candidate)
-        external onlyComplianceOfficer
-    {
+    function scheduleRevokeDelegationInUncompliance(
+        uint256 _ledgerIndex,
+        address _candidate
+    ) external onlyComplianceOfficer {
         require(uncompliance, "IN_COMPLIANCE");
         _scheduleRevokeDelegation(_ledgerIndex, _candidate);
     }
@@ -237,6 +238,10 @@ contract StakingPool is ReentrancyGuard {
     }
 
     //********************* MANAGER METHODS  *********************/
+
+    function depositAsBonus() external payable onlyCollatorProxy {
+        pendingDelegation += msg.value;
+    }
 
     function addLedger() external onlyCollatorProxy returns (address) {
         return _addLedger();
@@ -346,7 +351,12 @@ contract StakingPool is ReentrancyGuard {
         uint256 _amount,
         uint8 _autoCompound
     ) external onlyCollatorProxy {
-        _depositAndDelegateWithAutoCompound(_ledgerIndex, _candidate, _amount, _autoCompound);
+        _depositAndDelegateWithAutoCompound(
+            _ledgerIndex,
+            _candidate,
+            _amount,
+            _autoCompound
+        );
     }
 
     function depositAndBondMore(
@@ -408,7 +418,6 @@ contract StakingPool is ReentrancyGuard {
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
         ledger.delegateWithAutoCompound(_candidate, _amount, _autoCompound);
     }
-
 
     /**
     @dev Anybody can execute undelegations on chain, so this method is mainly for future-proofing in case permissions change
@@ -555,14 +564,9 @@ contract StakingPool is ReentrancyGuard {
         // pendingSchedulingUndelegation funds is a subset of reducible balance depending on whether the undelegations have been executed or not
         return poolFunds;
     }
-    
-    function _isProxy(address _manager) internal view virtual returns(bool) {
-        return proxy.isProxy(
-            COLLATOR,
-            _manager,
-            Proxy.ProxyType.Governance,
-            0
-        );
+
+    function _isProxy(address _manager) internal view virtual returns (bool) {
+        return proxy.isProxy(COLLATOR, _manager, Proxy.ProxyType.Governance, 0);
     }
 }
 
