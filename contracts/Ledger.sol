@@ -8,7 +8,6 @@ import "./TokenLiquidStaking.sol";
 contract Ledger {
 
     address payable STAKING_POOL;
-    address COLLATOR;
 
     ParachainStaking staking;
    
@@ -18,53 +17,52 @@ contract Ledger {
     }
 
     function initialize(
-        address _collator,
         address _parachainStaking,
         address payable _stakingPool
     ) external {
         require(_stakingPool != address(0) && STAKING_POOL == address(0), "ALREADY_INIT");
         STAKING_POOL = _stakingPool;
-        COLLATOR = _collator;
         staking = ParachainStaking(_parachainStaking);
     }
 
-    function delegate(uint256 _delegation) external onlyStakingPool {
+    function delegate(address _candidate, uint256 _delegation) external onlyStakingPool {
         staking.delegate(
-                COLLATOR,
+                _candidate,
                 _delegation,
                 staking.candidateDelegationCount(COLLATOR),
                 staking.delegatorDelegationCount(address(this))
         );
     }
 
-    function delegatorBondMore(uint256 _delegation)
+    function delegatorBondMore(address _candidate, uint256 _delegation)
         external onlyStakingPool
     {
-        staking.delegatorBondMore(COLLATOR, _delegation);
+        staking.delegatorBondMore(_candidate, _delegation);
     }
 
 
-    function scheduleDelegatorBondLess(uint256 _toUndelegate)
+    function scheduleDelegatorBondLess(address _candidate, uint256 _toUndelegate)
         external onlyStakingPool
     {
-        staking.scheduleDelegatorBondLess(COLLATOR, _toUndelegate);
+        staking.scheduleDelegatorBondLess(_candidate, _toUndelegate);
     }
-    function scheduleRevokeDelegation() external onlyStakingPool {
+    function scheduleRevokeDelegation(address _candidate) external onlyStakingPool {
         // we cannot revoke members that have made the minimum deposits
-        staking.scheduleRevokeDelegation(COLLATOR);
+        staking.scheduleRevokeDelegation(_candidate);
     }
 
     
-    function cancelDelegationRequest() external onlyStakingPool {
-        staking.cancelDelegationRequest(COLLATOR);
+    function cancelDelegationRequest(address _candidate) external onlyStakingPool {
+        staking.cancelDelegationRequest(_candidate);
     }
 
     function setAutoCompound(
+        address _candidate,
         uint8 _value
     ) external onlyStakingPool {
-        uint32 candidateAutoCompoundingDelegationCount = staking.candidateAutoCompoundingDelegationCount(COLLATOR);
+        uint32 candidateAutoCompoundingDelegationCount = staking.candidateAutoCompoundingDelegationCount(_candidate);
         staking.setAutoCompound(
-            COLLATOR,
+            _candidate,
             _value,
             candidateAutoCompoundingDelegationCount,
             staking.delegatorDelegationCount(address(this))
@@ -72,21 +70,22 @@ contract Ledger {
     }
 
     function delegateWithAutoCompound(
+        address _candidate,
         uint256 _amount,
         uint8 _autoCompound
     ) external onlyStakingPool {
         staking.delegateWithAutoCompound(
-            COLLATOR,
+            _candidate,
             _amount,
             _autoCompound,
-            staking.candidateDelegationCount(COLLATOR),
-            staking.candidateAutoCompoundingDelegationCount(COLLATOR),
+            staking.candidateDelegationCount(_candidate),
+            staking.candidateAutoCompoundingDelegationCount(_candidate),
             staking.delegatorDelegationCount(address(this))
         );
     }
 
-    function executeDelegationRequest() external onlyStakingPool {
-        staking.executeDelegationRequest(address(this), COLLATOR);
+    function executeDelegationRequest(address _candidate) external onlyStakingPool {
+        staking.executeDelegationRequest(address(this), _candidate);
     }
 
     function withdraw(uint256 _amount) external onlyStakingPool {
@@ -94,6 +93,11 @@ contract Ledger {
         require(sent, "EXEC_FAIL");
     }
 
+    /**
+    @dev Allows the staking pool to deposit funds to the ledger, increasing its reducible balance.
+    Although the ledger could be open to receiving funds from other sources (does not break accounting)
+    we limit it to receiving only from the stakingPool to allow for easier tracking/auditing of the pool.
+    */
     function deposit() external payable onlyStakingPool {
 
     }

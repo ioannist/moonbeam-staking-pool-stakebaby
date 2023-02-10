@@ -25,6 +25,7 @@ contract Staking_mock is ParachainStaking {
     /// @param delegator the address that we want to confirm is a delegator
     /// @return A boolean confirming whether the address is a delegator
     function isDelegator(address delegator) external view returns (bool) {
+        // NOT USED
         return false;
     }
 
