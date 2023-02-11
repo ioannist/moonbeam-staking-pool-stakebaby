@@ -44,15 +44,38 @@ contract StakingPool is ReentrancyGuard {
     // Buffered incoming undelegation requests
     uint256 public pendingSchedulingUndelegation;
     // toClaim is the amount of underlying that is excluded from the pool, and has its corresponding LS tokens burnt
-    // This amount is to be transfered to the claimable contract as soon as it is available
+    // This amount can be transfered to the claimable contract as soon as it is available in reducible balance
     uint256 public toClaim;
 
     // Max LST in circulation
     uint256 public MAX_LST;
 
-    // Pending undelegation requests (smart contract),
-    // who: delegator
-    // amount: delegation (underlying)
+    // EVENTS
+    event DelegatedToPool(address delegator, uint256 amount, uint256 lstAmount);
+    event ScheduledUndelegateFromPool(address delegator, uint256 amount, uint256 lstAmount);
+    event InLiquidationActivated();
+    event InLiquidationDeactivated();
+    event InLiquidationWithdrawal();
+    event InLiquidationRevoke();
+    event Rebase(uint256 underlyingPerLSToken, uint256 lstokenPerUnderlying);
+    event UndelegationExecuted(address delegator, uint256 amount);
+    event DepositedBonus(uint256 amount);
+    event AddedLedger(address ledger);
+    event RemovedLedger(address ledger);
+    event DepositedToLedger(address ledger, uint256 amount);
+    event WithdrawnFromLedger(address ledger, uint256 amount);
+    event MadeClaimable(uint256 amount);
+    event NetOutPending(uint256 amount);
+    event LedgerDelegate(address ledger, address candidate, uint256 amount);
+    event LedgerBondMore(address ledger, address candidate, uint256 amount);
+    event LedgerDelegateWithAutoCompound(address ledger, address candidate, uint256 amount);
+    event LedgerBondLess(address ledger, address candidate, uint256 amount);
+    event LedgerCancelDelegationRequest(address ledger, address _candidate);
+    event LedgerAutoCompoundSet(address ledger, address candidate, uint8 value);
+    event LedgerScheduledRevoke(address ledger, address _candidate);
+    event MaxLstSupplySet(uint256 supply);
+    
+    // Pending undelegation requests {who: delegator, amount: delegation, round}
     Queue.QueueStorage public undelegationQueue;
 
     modifier onlyCollatorProxy() {
@@ -101,6 +124,7 @@ contract StakingPool is ReentrancyGuard {
         uint256 toMintLST = (msg.value * lstokenPerUnderlying) / 1 ether;
         require(toMintLST + tokenLiquidStaking.totalSupply() <= MAX_LST, "MAX_LST");
         pendingDelegation += msg.value;
+        emit DelegatedToPool(msg.sender, msg.value, toMintLST);
         tokenLiquidStaking.mintToAddress(msg.sender, toMintLST);
     }
 
@@ -132,6 +156,7 @@ contract StakingPool is ReentrancyGuard {
         Queue.pushBack(undelegationQueue, whoAmount);
         pendingSchedulingUndelegation += toWithdraw;
         toClaim += toWithdraw;
+        emit ScheduledUndelegateFromPool(msg.sender, toWithdraw, _amountLST);
         tokenLiquidStaking.burnFromAddress(msg.sender, _amountLST);
     }
 
@@ -159,6 +184,7 @@ contract StakingPool is ReentrancyGuard {
             staking.round();
         bool isNotCandidate = !staking.isCandidate(COLLATOR);
         require(undelegationThresholdReached || isNotCandidate, "COND_NOT_MET");
+        emit InLiquidationActivated();
         inLiquidation = true;
     }
 
@@ -167,6 +193,7 @@ contract StakingPool is ReentrancyGuard {
         uint256 _amount
     ) external {
         require(inLiquidation, "NO_LIQ");
+        emit InLiquidationWithdrawal();
         _withdrawFromLedger(_ledgerIndex, _amount);
     }
 
@@ -175,6 +202,7 @@ contract StakingPool is ReentrancyGuard {
         address _candidate
     ) external {
         require(inLiquidation, "NO_LIQ");
+        emit InLiquidationRevoke();
         _scheduleRevokeDelegation(_ledgerIndex, _candidate);
     }
 
@@ -198,6 +226,7 @@ contract StakingPool is ReentrancyGuard {
             );
             address delegator = whoAmount.who;
             uint256 amount = whoAmount.amount;
+            emit UndelegationExecuted(delegator, amount);
             claimable.depositClaim{value: amount}(delegator);
             amounts += amount;
         }
@@ -211,6 +240,7 @@ contract StakingPool is ReentrancyGuard {
     //********************* MANAGER METHODS  *********************/
 
     function depositAsBonus() external payable onlyCollatorProxy {
+        emit DepositedBonus(msg.value);
         pendingDelegation += msg.value;
     }
 
@@ -230,6 +260,7 @@ contract StakingPool is ReentrancyGuard {
         uint256 last = ledgers.length - 1;
         if (_ledgerIndex != last) ledgers[_ledgerIndex] = ledgers[last];
         ledgers.pop();
+        emit RemovedLedger(ledger);
     }
 
     function deactivateInLiquidation() external onlyCollatorProxy {
@@ -240,6 +271,7 @@ contract StakingPool is ReentrancyGuard {
             "COND_NOT_MET"
         );
         inLiquidation = false;
+        emit InLiquidationDeactivated();
     }
 
     function withdrawFromLedger(uint256 _ledgerIndex, uint256 _amount)
@@ -256,7 +288,8 @@ contract StakingPool is ReentrancyGuard {
         require(address(this).balance >= _amount, "INV_AMOUNT");
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         address _ledger = ledgers[_ledgerIndex];
-        Ledger ledger = Ledger(_ledger);
+        Ledger ledger = Ledger(payable(_ledger));
+        emit DepositedToLedger(_ledger, _amount);
         ledger.deposit{value: _amount}();
     }
 
@@ -266,6 +299,7 @@ contract StakingPool is ReentrancyGuard {
     function makeClaimable(uint256 _amount) external onlyCollatorProxy {
         require(_amount <= pendingDelegation && _amount > 0, "INV_AMOUNT");
         pendingDelegation -= _amount;
+        emit MadeClaimable(_amount);
     }
 
     function netOutPending() external onlyCollatorProxy returns (uint256) {
@@ -274,6 +308,7 @@ contract StakingPool is ReentrancyGuard {
             : pendingSchedulingUndelegation;
         pendingDelegation -= net;
         pendingSchedulingUndelegation -= net;
+        emit NetOutPending(net);
         return net;
     }
 
@@ -282,6 +317,7 @@ contract StakingPool is ReentrancyGuard {
         require(_amount <= pendingDelegation, "INV_DEL_AMOUNT");
         pendingDelegation -= _amount;
         pendingSchedulingUndelegation -= _amount;
+        emit NetOutPending(_amount);
     }
 
     function delegate(
@@ -293,6 +329,7 @@ contract StakingPool is ReentrancyGuard {
         require(_amount <= pendingDelegation, "INV_AMOUNT");
         pendingDelegation -= _amount;
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit LedgerDelegate(address(ledger), _candidate, _amount);
         ledger.delegate(_candidate, _amount);
     }
 
@@ -305,6 +342,7 @@ contract StakingPool is ReentrancyGuard {
         require(_amount <= pendingDelegation, "INV_AMOUNT");
         pendingDelegation -= _amount;
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit LedgerBondMore(address(ledger), _candidate, _amount);
         ledger.delegatorBondMore(_candidate, _amount);
     }
 
@@ -317,6 +355,8 @@ contract StakingPool is ReentrancyGuard {
         require(_amount <= pendingDelegation, "INV_AMOUNT");
         pendingDelegation -= _amount;
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit DepositedToLedger(address(ledger), _amount);
+        emit LedgerDelegate(address(ledger), _candidate, _amount);
         ledger.deposit{value: _amount}();
         ledger.delegate(_candidate, _amount);
     }
@@ -331,6 +371,8 @@ contract StakingPool is ReentrancyGuard {
         require(_amount <= pendingDelegation, "INV_AMOUNT");
         pendingDelegation -= _amount;
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit DepositedToLedger(address(ledger), _amount);
+        emit LedgerDelegateWithAutoCompound(address(ledger), _candidate, _amount);
         ledger.deposit{value: _amount}();
         ledger.delegateWithAutoCompound(_candidate, _amount, _autoCompound);
     }
@@ -343,6 +385,8 @@ contract StakingPool is ReentrancyGuard {
         require(address(this).balance >= _amount, "INV_AMOUNT");
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit DepositedToLedger(address(ledger), _amount);
+        emit LedgerBondMore(address(ledger), _candidate, _amount);
         ledger.deposit{value: _amount}();
         ledger.delegatorBondMore(_candidate, _amount);
     }
@@ -356,7 +400,8 @@ contract StakingPool is ReentrancyGuard {
         require(_amount <= pendingSchedulingUndelegation, "INV_AMOUNT");
         pendingSchedulingUndelegation -= _amount;
         address _ledger = ledgers[_ledgerIndex];
-        Ledger ledger = Ledger(_ledger);
+        Ledger ledger = Ledger(payable(_ledger));
+        emit LedgerBondLess(address(ledger), _candidate, _amount);
         ledger.scheduleDelegatorBondLess(_candidate, _amount);
     }
 
@@ -374,12 +419,14 @@ contract StakingPool is ReentrancyGuard {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         require(!uncompliance, "IN_UNCOMPLIANCE");
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit LedgerCancelDelegationRequest(address(ledger), _candidate);
         ledger.cancelDelegationRequest(_candidate);
     }
 
     function setMaxLST(uint256 _maxLST) external onlyCollatorProxy {
         require(_maxLST >= tokenLiquidStaking.totalSupply(), "BELOW_SUPPLY");
         MAX_LST = _maxLST;
+        emit MaxLstSupplySet(_maxLST);
     }
 
     function setAutoCompound(
@@ -389,6 +436,7 @@ contract StakingPool is ReentrancyGuard {
     ) external onlyCollatorProxy {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit LedgerAutoCompoundSet(address(ledger), _candidate, _value);
         ledger.setAutoCompound(_candidate, _value);
     }
 
@@ -400,6 +448,7 @@ contract StakingPool is ReentrancyGuard {
     ) external onlyCollatorProxy {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        emit LedgerDelegateWithAutoCompound(address(ledger), _candidate, _amount);
         ledger.delegateWithAutoCompound(_candidate, _amount, _autoCompound);
     }
 
@@ -428,11 +477,13 @@ contract StakingPool is ReentrancyGuard {
             underlyingPerLSToken = (underlying * 1 ether) / lsTokens;
             lstokenPerUnderlying = (lsTokens * 1 ether) / underlying;
         }
+        emit Rebase(underlyingPerLSToken, lstokenPerUnderlying);
     }
 
     function _addLedger() internal returns (address) {
         Ledger ledger = new Ledger();
         ledgers.push(payable(address(ledger)));
+        emit AddedLedger(address(ledger));
         return address(ledger);
     }
 
@@ -442,7 +493,8 @@ contract StakingPool is ReentrancyGuard {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         address _ledger = ledgers[_ledgerIndex];
         require(address(_ledger).balance >= _amount, "INV_AMOUNT");
-        Ledger ledger = Ledger(_ledger);
+        Ledger ledger = Ledger(payable(_ledger));
+        emit WithdrawnFromLedger(_ledger, _amount);
         ledger.withdraw(_amount);
     }
 
@@ -454,7 +506,8 @@ contract StakingPool is ReentrancyGuard {
         uint256 amount = staking.delegationAmount(_ledger, COLLATOR);
         require(amount <= pendingSchedulingUndelegation, "INV_AMOUNT");
         pendingSchedulingUndelegation -= amount;
-        Ledger ledger = Ledger(_ledger);
+        Ledger ledger = Ledger(payable(_ledger));
+        emit LedgerScheduledRevoke(_ledger, _candidate);
         ledger.scheduleRevokeDelegation(_candidate);
     }
 
