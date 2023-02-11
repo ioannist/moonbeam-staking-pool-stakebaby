@@ -46,6 +46,8 @@ contract StakingPool is ReentrancyGuard {
     // toClaim is the amount of underlying that is excluded from the pool, and has its corresponding LS tokens burnt
     // This amount can be transfered to the claimable contract as soon as it is available in reducible balance
     uint256 public toClaim;
+    // Convenience data structure for accessing pending claims per delegator
+    mapping(address => uint256) public delegatorToClaims;
 
     // Max LST in circulation
     uint256 public MAX_LST;
@@ -156,6 +158,7 @@ contract StakingPool is ReentrancyGuard {
         Queue.pushBack(undelegationQueue, whoAmount);
         pendingSchedulingUndelegation += toWithdraw;
         toClaim += toWithdraw;
+        delegatorToClaims[msg.sender] += toWithdraw;
         emit ScheduledUndelegateFromPool(msg.sender, toWithdraw, _amountLST);
         tokenLiquidStaking.burnFromAddress(msg.sender, _amountLST);
     }
@@ -226,6 +229,7 @@ contract StakingPool is ReentrancyGuard {
             );
             address delegator = whoAmount.who;
             uint256 amount = whoAmount.amount;
+            delegatorToClaims[delegator] -= amount;
             emit UndelegationExecuted(delegator, amount);
             claimable.depositClaim{value: amount}(delegator);
             amounts += amount;
