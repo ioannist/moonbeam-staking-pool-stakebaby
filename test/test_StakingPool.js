@@ -372,12 +372,34 @@ contract('StakingPool', accounts => {
         expect(await sp.ledgers(0)).to.be.equal(ledger1);
     });
 
+    it("add/remove ledger (2)", async () => {
+        await sp.addLedger(); // add second ledger
+        const ledger0 = await sp.ledgers(0);
+        await sp.removeLedger(1);
+        expect(await sp.ledgers(0)).to.be.equal(ledger0);
+    });
+
     it("deposit and delegate through ledger", async () => {
         const candidate1 = ONE_ADDR;
         const ledger0 = await sp.ledgers(0);
         const userDeposit1 = new BN(web3.utils.toWei("7", "ether"));
         await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(userDeposit1);
+        await sp.depositToLedger(0, userDeposit1);
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(userDeposit1);
+        await sp.delegate(0, candidate1, userDeposit1);
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(zero);
+        expect(await st.delegationAmount(ledger0, candidate1)).to.be.bignumber.equal(userDeposit1);
+    });
+
+    it("deposit and delegate (bundled) through ledger", async () => {
+        const candidate1 = ONE_ADDR;
+        const ledger0 = await sp.ledgers(0);
+        const userDeposit1 = new BN(web3.utils.toWei("7", "ether"));
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(userDeposit1);
         await sp.depositAndDelegate(0, candidate1, userDeposit1);
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(zero);
         expect(await st.delegationAmount(ledger0, candidate1)).to.be.bignumber.equal(userDeposit1);
     });
     
@@ -480,7 +502,7 @@ contract('StakingPool', accounts => {
         expect(await st.delegationAmount(ledger0, candidate1)).to.be.bignumber.equal(delegationAfterBondLess);
     });
 
-    it("deposit, delegate and bond more through ledger", async () => {
+    it("deposit, delegate and bond more (bundled) through ledger", async () => {
         const candidate1 = ONE_ADDR;
         const ledger0 = await sp.ledgers(0);
         const userDeposit1 = new BN(web3.utils.toWei("7", "ether"));
@@ -492,6 +514,25 @@ contract('StakingPool', accounts => {
         expect(await st.delegationAmount(ledger0, candidate1)).to.be.bignumber.equal(userDeposit1);
         await sp.delegatorStakeAndReceiveLSTokens({from: delegator2, value: bondMore});
         await sp.depositAndBondMore(0, candidate1, bondMore);
+        expect(await st.delegationAmount(ledger0, candidate1)).to.be.bignumber.equal(delegationAfterBondMore);
+    });
+
+    it("deposit, delegate and bond more through ledger", async () => {
+        const candidate1 = ONE_ADDR;
+        const ledger0 = await sp.ledgers(0);
+        const userDeposit1 = new BN(web3.utils.toWei("7", "ether"));
+        const bondMore = new BN(web3.utils.toWei("3", "ether"));
+        const delegationAfterBondMore = userDeposit1.add(bondMore);
+
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
+        await sp.depositAndDelegate(0, candidate1, userDeposit1);
+        expect(await st.delegationAmount(ledger0, candidate1)).to.be.bignumber.equal(userDeposit1);
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator2, value: bondMore});
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(bondMore);
+        await sp.depositToLedger(0, bondMore);
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(bondMore);
+        await sp.delegatorBondMore(0, candidate1, bondMore);
+        expect(await sp.pendingDelegation()).to.be.bignumber.equal(zero);
         expect(await st.delegationAmount(ledger0, candidate1)).to.be.bignumber.equal(delegationAfterBondMore);
     });
 
@@ -576,6 +617,8 @@ contract('StakingPool', accounts => {
     });
 
     return;
+
+    // deactivateInLiquidation
 
     it("", async () => {
         
