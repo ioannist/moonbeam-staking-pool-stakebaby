@@ -412,6 +412,23 @@ contract('StakingPool', accounts => {
         expect(await web3.eth.getBalance(ledger0)).to.be.bignumber.equal(zero);
     });
 
+    it("pool in-liquidation can transfer to and from ledger", async () => {
+        const userDeposit1 = new BN(web3.utils.toWei("9", "ether"));
+        const initialBalance = new BN(web3.utils.toWei("1", "ether"));
+        const expectedBalance = initialBalance.add(userDeposit1);
+        const ledger0 = await sp.ledgers(0);
+
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedBalance);
+        await sp.depositToLedger(0, userDeposit1, {from: manager});
+
+        await expect(sp.withdrawFromLedgerInLiquidation(0, userDeposit1, {from: manager})).to.be.rejectedWith('NO_LIQ');
+        await sp.activateInLiquidation();
+        await sp.withdrawFromLedgerInLiquidation(0, userDeposit1, {from: manager});
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedBalance);
+        expect(await web3.eth.getBalance(ledger0)).to.be.bignumber.equal(zero);
+    });
+
     it("pool can transfer to and from second ledger", async () => {
         const userDeposit1 = new BN(web3.utils.toWei("8", "ether"));
         const initialBalance = new BN(web3.utils.toWei("1", "ether"));
@@ -641,8 +658,8 @@ contract('StakingPool', accounts => {
         const expectedLstBalance = initialLstBalance.add(expectedLstForDeposit);
         const expectedLstAfterWithdrawal1 = expectedLstForDeposit.sub(userLstWithdraw1);
         const expectedAfterReward = expectedBalance.add(rewardAmount);
-        const expectedWithdrawal = userLstWithdraw1.mul(expectedAfterReward).div(expectedLstBalance);
-        const expectedAfterWithdrawal = expectedAfterReward.sub(expectedWithdrawal);
+        const expectedWithdrawal1 = userLstWithdraw1.mul(expectedAfterReward).div(expectedLstBalance);
+        const expectedAfterWithdrawal = expectedAfterReward.sub(expectedWithdrawal1);
 
         await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
         expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstForDeposit);
@@ -656,7 +673,7 @@ contract('StakingPool', accounts => {
         await sp.delegatorScheduleUnstakeAndBurnLSTokens(userLstWithdraw1, {from: delegator1});
         expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstAfterWithdrawal1);
         expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedAfterReward);
-        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(expectedWithdrawal);
+        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(expectedWithdrawal1);
 
         await sp.netOutPending({from: manager});
         await sp.executeUndelegations(1, {from: manager});
@@ -677,8 +694,8 @@ contract('StakingPool', accounts => {
         const expectedLstBalance = initialLstBalance.add(expectedLstForDeposit);
         const expectedLstAfterWithdrawal1 = expectedLstForDeposit.sub(userLstWithdraw1);
         const expectedAfterReward = expectedBalance.add(rewardAmount);
-        const expectedWithdrawal = userLstWithdraw1.mul(expectedAfterReward).div(expectedLstBalance);
-        const expectedAfterWithdrawal = expectedAfterReward.sub(expectedWithdrawal);
+        const expectedWithdrawal1 = userLstWithdraw1.mul(expectedAfterReward).div(expectedLstBalance);
+        const expectedAfterWithdrawal = expectedAfterReward.sub(expectedWithdrawal1);
 
         await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
         expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstForDeposit);
@@ -692,13 +709,103 @@ contract('StakingPool', accounts => {
         await sp.delegatorScheduleUnstakeAndBurnLSTokens(userLstWithdraw1, {from: delegator1});
         expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstAfterWithdrawal1);
         expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedAfterReward);
-        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(expectedWithdrawal);
+        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(expectedWithdrawal1);
 
         await sp.netOutPending({from: manager});
         await sp.executeUndelegations(1, {from: manager});
         expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstAfterWithdrawal1);
         expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedAfterWithdrawal);
         return expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(zero);              
+    });
+
+    it("users depositing, scheduling and executing withdrawal (with rewards), check TLS and balances before and after", async () => {
+        const userDeposit1 = new BN(web3.utils.toWei("7", "ether"));
+        const userDeposit2 = new BN(web3.utils.toWei("13", "ether"));
+        const rewardAmount = new BN(web3.utils.toWei("1", "ether"));
+        const userLstWithdraw1 = new BN(web3.utils.toWei("4", "ether"));
+        const initialBalance = new BN(web3.utils.toWei("1", "ether"));
+        const initialLstBalance = new BN(web3.utils.toWei("1", "ether"));
+
+        const expectedBalance = initialBalance.add(userDeposit1).add(userDeposit2);
+        const expectedLstForDeposit1 = userDeposit1; // at 1:1
+        const expectedLstForDeposit2 = userDeposit2; // at 1:1
+        const expectedLstBalance = initialLstBalance.add(expectedLstForDeposit1).add(expectedLstForDeposit2);
+        const expectedLstAfterWithdrawal1 = expectedLstForDeposit1.sub(userLstWithdraw1);
+        const expectedAfterReward = expectedBalance.add(rewardAmount);
+        const expectedWithdrawal1 = userLstWithdraw1.mul(expectedAfterReward).div(expectedLstBalance);
+        const expectedAfterWithdrawal = expectedAfterReward.sub(expectedWithdrawal1);
+
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator2, value: userDeposit2});
+        expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstForDeposit1);
+        expect(await tls.balanceOf(delegator2)).to.be.bignumber.equal(expectedLstForDeposit2);
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedBalance);
+        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(zero);
+        expect(await sp.delegatorToClaims(delegator2)).to.be.bignumber.equal(zero);
+
+        // simulate rewards
+        await sp.simulateRewards({from: rewards, value: rewardAmount});
+        await sp.rebase({from: agent007});
+
+        await sp.delegatorScheduleUnstakeAndBurnLSTokens(userLstWithdraw1, {from: delegator1});
+        expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstAfterWithdrawal1);
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedAfterReward);
+        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(expectedWithdrawal1);
+
+        await sp.netOutPending({from: manager});
+        await sp.executeUndelegations(1, {from: manager});
+        expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstAfterWithdrawal1);
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedAfterWithdrawal);
+        return expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(zero);        
+    });
+
+    it("users depositing, scheduling and executing withdrawal (with rewards), check TLS and balances before and after (2)", async () => {
+        const userDeposit1 = new BN(web3.utils.toWei("7", "ether"));
+        const userDeposit2 = new BN(web3.utils.toWei("13", "ether"));
+        const rewardAmount = new BN(web3.utils.toWei("1", "ether"));
+        const userLstWithdraw1 = new BN(web3.utils.toWei("4", "ether"));
+        const userLstWithdraw2 = new BN(web3.utils.toWei("4", "ether"));
+        const initialBalance = new BN(web3.utils.toWei("1", "ether"));
+        const initialLstBalance = new BN(web3.utils.toWei("1", "ether"));
+
+        const expectedBalance = initialBalance.add(userDeposit1).add(userDeposit2);
+        const expectedLstForDeposit1 = userDeposit1; // at 1:1
+        const expectedLstForDeposit2 = userDeposit2; // at 1:1
+        const expectedLstBalance = initialLstBalance.add(expectedLstForDeposit1).add(expectedLstForDeposit2);
+        const expectedLstAfterWithdrawal1 = expectedLstForDeposit1.sub(userLstWithdraw1);
+        const expectedLstAfterWithdrawal2 = expectedLstForDeposit2.sub(userLstWithdraw2);
+        const expectedAfterReward = expectedBalance.add(rewardAmount);
+        const expectedWithdrawal1 = userLstWithdraw1.mul(expectedAfterReward).div(expectedLstBalance);
+        const expectedWithdrawal2 = userLstWithdraw2.mul(expectedAfterReward).div(expectedLstBalance);
+        const expectedAfterWithdrawal = expectedAfterReward.sub(expectedWithdrawal1).sub(expectedWithdrawal2);
+
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
+        await sp.delegatorStakeAndReceiveLSTokens({from: delegator2, value: userDeposit2});
+        expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstForDeposit1);
+        expect(await tls.balanceOf(delegator2)).to.be.bignumber.equal(expectedLstForDeposit2);
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedBalance);
+        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(zero);
+        expect(await sp.delegatorToClaims(delegator2)).to.be.bignumber.equal(zero);
+
+        // simulate rewards
+        await sp.simulateRewards({from: rewards, value: rewardAmount});
+        await sp.rebase({from: agent007});
+
+        await sp.delegatorScheduleUnstakeAndBurnLSTokens(userLstWithdraw1, {from: delegator1});
+        await sp.delegatorScheduleUnstakeAndBurnLSTokens(userLstWithdraw2, {from: delegator2});
+        expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstAfterWithdrawal1);
+        expect(await tls.balanceOf(delegator2)).to.be.bignumber.equal(expectedLstAfterWithdrawal2);
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedAfterReward);
+        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(expectedWithdrawal1);
+        expect(await sp.delegatorToClaims(delegator2)).to.be.bignumber.equal(expectedWithdrawal2);
+
+        await sp.netOutPending({from: manager});
+        await sp.executeUndelegations(2, {from: manager});
+        expect(await tls.balanceOf(delegator1)).to.be.bignumber.equal(expectedLstAfterWithdrawal1);
+        expect(await tls.balanceOf(delegator2)).to.be.bignumber.equal(expectedLstAfterWithdrawal2);
+        expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(expectedAfterWithdrawal);
+        expect(await sp.delegatorToClaims(delegator1)).to.be.bignumber.equal(zero);
+        return expect(await sp.delegatorToClaims(delegator2)).to.be.bignumber.equal(zero);        
     });
 
     // deactivateInLiquidation, setAutoCompound

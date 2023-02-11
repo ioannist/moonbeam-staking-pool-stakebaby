@@ -8,7 +8,12 @@ contract StakingPool_mock is StakingPool {
         return true;
     }
 
+    function activateInLiquidation() external override {
+        emit InLiquidationActivated();
+        inLiquidation = true;
+    }
+
     function simulateRewards() external payable {
-        
+
     }
 }
