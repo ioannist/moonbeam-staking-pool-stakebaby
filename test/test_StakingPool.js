@@ -61,6 +61,8 @@ contract('StakingPool', accounts => {
           ca.address,
           {value: _tokenLiquidStakingInitialSupply}
         );
+        const lstMaxLST = new BN(web3.utils.toWei("1000000", "ether"));
+        await sp.setMaxLST(lstMaxLST, {from: manager});
       
         console.log(`Initializing Claimable`);      
         await ca.initialize(sp.address)

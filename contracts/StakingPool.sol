@@ -16,12 +16,9 @@ contract StakingPool is ReentrancyGuard {
     address payable CLAIMABLE;
     // User accounts
     address COLLATOR;
-    address COMPLIANCE_OFFICER;
 
     // If a pending undelegation request takes more than this rounds to be served, then inLiquidation -> true
     uint256 public constant LIQUIDATION_ROUND_THRESHOLD = 12 * 30;
-    // The pool must maintain at least this % of staked funds, staked to COLLATOR
-    uint256 public constant MIN_PER_STAKED_TO_COLLATOR = 50;
 
     ParachainStaking staking;
     Proxy proxy;
@@ -50,6 +47,9 @@ contract StakingPool is ReentrancyGuard {
     // This amount is to be transfered to the claimable contract as soon as it is available
     uint256 public toClaim;
 
+    // Max LST in circulation
+    uint256 public MAX_LST;
+
     // Pending undelegation requests (smart contract),
     // who: delegator
     // amount: delegation (underlying)
@@ -57,11 +57,6 @@ contract StakingPool is ReentrancyGuard {
 
     modifier onlyCollatorProxy() {
         require(_isProxy(msg.sender), "NOT_AUTH");
-        _;
-    }
-
-    modifier onlyComplianceOfficer() {
-        require(msg.sender == COMPLIANCE_OFFICER, "NOT_AUTH");
         _;
     }
 
@@ -104,6 +99,7 @@ contract StakingPool is ReentrancyGuard {
         require(msg.value > 0, "ZERO_PAYMENT");
         // we exclude msg.value from the ratio calculation because the ratio must be calculated based on previous deposits and minted LS tokens
         uint256 toMintLST = (msg.value * lstokenPerUnderlying) / 1 ether;
+        require(toMintLST + tokenLiquidStaking.totalSupply() <= MAX_LST, "MAX_LST");
         pendingDelegation += msg.value;
         tokenLiquidStaking.mintToAddress(msg.sender, toMintLST);
     }
@@ -122,7 +118,8 @@ contract StakingPool is ReentrancyGuard {
             tokenLiquidStaking.balanceOf(msg.sender) >= _amountLST,
             "INS_BALANCE"
         );
-        if (staking.round() > lastRoundRebased) {
+        uint256 round = staking.round();
+        if (round > lastRoundRebased) {
             _rebase();
         }
         // the exchange rate is booked when the delegator schedules the request
@@ -130,7 +127,7 @@ contract StakingPool is ReentrancyGuard {
         Queue.WhoAmount memory whoAmount = Queue.WhoAmount({
             who: msg.sender,
             amount: toWithdraw,
-            round: staking.round()
+            round: round
         });
         Queue.pushBack(undelegationQueue, whoAmount);
         pendingSchedulingUndelegation += toWithdraw;
@@ -148,24 +145,6 @@ contract StakingPool is ReentrancyGuard {
     */
     function rebase() external {
         _rebase();
-    }
-
-    function checkMinStakedCompliance() external {
-        uint256 staked;
-        uint256 collatorStaked;
-        uint256 ledgersLength = ledgers.length;
-
-        for (uint256 i = 0; i < ledgersLength; ) {
-            address ldg = ledgers[i];
-            staked += staking.getDelegatorTotalStaked(ldg);
-            collatorStaked += staking.delegationAmount(ldg, COLLATOR);
-            unchecked {
-                ++i;
-            }
-        }
-        // If pool is staking less then MIN_PER_STAKED_TO_COLLATOR to COLLATOR, then it is not in compliance
-        uncompliance =
-            (100 * collatorStaked) / staked < MIN_PER_STAKED_TO_COLLATOR;
     }
 
     /**
@@ -196,14 +175,6 @@ contract StakingPool is ReentrancyGuard {
         address _candidate
     ) external {
         require(inLiquidation, "NO_LIQ");
-        _scheduleRevokeDelegation(_ledgerIndex, _candidate);
-    }
-
-    function scheduleRevokeDelegationInUncompliance(
-        uint256 _ledgerIndex,
-        address _candidate
-    ) external onlyComplianceOfficer {
-        require(uncompliance, "IN_COMPLIANCE");
         _scheduleRevokeDelegation(_ledgerIndex, _candidate);
     }
 
@@ -392,10 +363,9 @@ contract StakingPool is ReentrancyGuard {
         ledger.cancelDelegationRequest(_candidate);
     }
 
-    function setComplianceOfficer(address _officer) external onlyCollatorProxy {
-        require(COMPLIANCE_OFFICER == address(0), "ALREADY_INIT");
-        require(_officer != address(0), "INV_ADDRESS");
-        COMPLIANCE_OFFICER = _officer;
+    function setMaxLST(uint256 _maxLST) external onlyCollatorProxy {
+        require(_maxLST >= tokenLiquidStaking.totalSupply(), "BELOW_SUPPLY");
+        MAX_LST = _maxLST;
     }
 
     function setAutoCompound(
