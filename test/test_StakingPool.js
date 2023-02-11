@@ -618,7 +618,7 @@ contract('StakingPool', accounts => {
 
     return;
 
-    // deactivateInLiquidation
+    // deactivateInLiquidation, setAutoCompound
 
     it("", async () => {
         

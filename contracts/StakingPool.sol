@@ -313,7 +313,12 @@ contract StakingPool is ReentrancyGuard {
         address _candidate,
         uint256 _amount
     ) external onlyCollatorProxy {
-        _depositAndDelegate(_ledgerIndex, _candidate, _amount);
+        require(_ledgerIndex < ledgers.length, "INV_INDEX");
+        require(_amount <= pendingDelegation, "INV_AMOUNT");
+        pendingDelegation -= _amount;
+        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        ledger.deposit{value: _amount}();
+        ledger.delegate(_candidate, _amount);
     }
 
     function depositAndDelegateWithAutoCompound(
@@ -322,12 +327,12 @@ contract StakingPool is ReentrancyGuard {
         uint256 _amount,
         uint8 _autoCompound
     ) external onlyCollatorProxy {
-        _depositAndDelegateWithAutoCompound(
-            _ledgerIndex,
-            _candidate,
-            _amount,
-            _autoCompound
-        );
+        require(_ledgerIndex < ledgers.length, "INV_INDEX");
+        require(_amount <= pendingDelegation, "INV_AMOUNT");
+        pendingDelegation -= _amount;
+        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        ledger.deposit{value: _amount}();
+        ledger.delegateWithAutoCompound(_candidate, _amount, _autoCompound);
     }
 
     function depositAndBondMore(
@@ -335,7 +340,11 @@ contract StakingPool is ReentrancyGuard {
         address _candidate,
         uint256 _amount
     ) external onlyCollatorProxy {
-        _depositAndBondMore(_ledgerIndex, _candidate, _amount);
+        require(address(this).balance >= _amount, "INV_AMOUNT");
+        require(_ledgerIndex < ledgers.length, "INV_INDEX");
+        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        ledger.deposit{value: _amount}();
+        ledger.delegatorBondMore(_candidate, _amount);
     }
 
     function scheduleDelegatorBondLess(
@@ -343,7 +352,12 @@ contract StakingPool is ReentrancyGuard {
         address _candidate,
         uint256 _amount
     ) external onlyCollatorProxy {
-        _scheduleDelegatorBondLess(_ledgerIndex, _candidate, _amount);
+        require(_ledgerIndex < ledgers.length, "INV_INDEX");
+        require(_amount <= pendingSchedulingUndelegation, "INV_AMOUNT");
+        pendingSchedulingUndelegation -= _amount;
+        address _ledger = ledgers[_ledgerIndex];
+        Ledger ledger = Ledger(_ledger);
+        ledger.scheduleDelegatorBondLess(_candidate, _amount);
     }
 
     function scheduleRevokeDelegation(uint256 _ledgerIndex, address _candidate)
@@ -401,22 +415,6 @@ contract StakingPool is ReentrancyGuard {
         ledger.executeDelegationRequest(_candidate);
     }
 
-    function executeMatureUndelegationRequests(address _candidate)
-        external
-        onlyCollatorProxy
-    {
-        for (uint256 i = 0; i < ledgers.length; i++) {
-            address _ledger = ledgers[i];
-            // If there is no undelegation request, skip
-            if (!staking.delegationRequestIsPending(_ledger, _candidate)) {
-                continue;
-            }
-            try
-                staking.executeDelegationRequest(_ledger, _candidate)
-            {} catch {}
-        }
-    }
-
     //********************* INTERNAL POOL METHODS  *********************/
 
     function _rebase() internal {
@@ -446,58 +444,6 @@ contract StakingPool is ReentrancyGuard {
         require(address(_ledger).balance >= _amount, "INV_AMOUNT");
         Ledger ledger = Ledger(_ledger);
         ledger.withdraw(_amount);
-    }
-
-    function _depositAndDelegate(
-        uint256 _ledgerIndex,
-        address _candidate,
-        uint256 _amount
-    ) internal {
-        require(_ledgerIndex < ledgers.length, "INV_INDEX");
-        require(_amount <= pendingDelegation, "INV_AMOUNT");
-        pendingDelegation -= _amount;
-        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
-        ledger.deposit{value: _amount}();
-        ledger.delegate(_candidate, _amount);
-    }
-
-    function _depositAndDelegateWithAutoCompound(
-        uint256 _ledgerIndex,
-        address _candidate,
-        uint256 _amount,
-        uint8 _autoCompound
-    ) internal {
-        require(_ledgerIndex < ledgers.length, "INV_INDEX");
-        require(_amount <= pendingDelegation, "INV_AMOUNT");
-        pendingDelegation -= _amount;
-        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
-        ledger.deposit{value: _amount}();
-        ledger.delegateWithAutoCompound(_candidate, _amount, _autoCompound);
-    }
-
-    function _depositAndBondMore(
-        uint256 _ledgerIndex,
-        address _candidate,
-        uint256 _amount
-    ) private {
-        require(address(this).balance >= _amount, "INV_AMOUNT");
-        require(_ledgerIndex < ledgers.length, "INV_INDEX");
-        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
-        ledger.deposit{value: _amount}();
-        ledger.delegatorBondMore(_candidate, _amount);
-    }
-
-    function _scheduleDelegatorBondLess(
-        uint256 _ledgerIndex,
-        address _candidate,
-        uint256 _amount
-    ) internal {
-        require(_ledgerIndex < ledgers.length, "INV_INDEX");
-        require(_amount <= pendingSchedulingUndelegation, "INV_AMOUNT");
-        pendingSchedulingUndelegation -= _amount;
-        address _ledger = ledgers[_ledgerIndex];
-        Ledger ledger = Ledger(_ledger);
-        ledger.scheduleDelegatorBondLess(_candidate, _amount);
     }
 
     function _scheduleRevokeDelegation(uint256 _ledgerIndex, address _candidate)
