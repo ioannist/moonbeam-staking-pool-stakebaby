@@ -100,8 +100,4 @@ contract Ledger {
     */
     function deposit() external payable onlyStakingPool {}
 
-    receive() external payable {
-        revert();
-    }
-
 }

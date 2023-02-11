@@ -551,9 +551,6 @@ contract StakingPool is ReentrancyGuard {
         return proxy.isProxy(COLLATOR, _manager, Proxy.ProxyType.Governance, 0);
     }
 
-    receive() external payable {
-        revert();
-    }
 }
 
 //********************* QUEUE *********************/

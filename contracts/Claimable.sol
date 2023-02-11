@@ -36,7 +36,4 @@ contract Claimable {
         claimables[_delegator] += msg.value;
     }
 
-    receive() external payable {
-        revert();
-    }
 }
