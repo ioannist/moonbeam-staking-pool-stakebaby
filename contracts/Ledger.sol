@@ -98,8 +98,10 @@ contract Ledger {
     Although the ledger could be open to receiving funds from other sources (does not break accounting)
     we limit it to receiving only from the stakingPool to allow for easier tracking/auditing of the pool.
     */
-    function deposit() external payable onlyStakingPool {
+    function deposit() external payable onlyStakingPool {}
 
+    receive() external payable {
+        revert();
     }
 
 }

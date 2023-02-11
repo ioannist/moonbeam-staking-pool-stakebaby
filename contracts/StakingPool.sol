@@ -484,6 +484,10 @@ contract StakingPool is ReentrancyGuard {
     function _isProxy(address _manager) internal view virtual returns (bool) {
         return proxy.isProxy(COLLATOR, _manager, Proxy.ProxyType.Governance, 0);
     }
+
+    receive() external payable {
+        revert();
+    }
 }
 
 //********************* QUEUE *********************/
@@ -511,14 +515,6 @@ library Queue {
      * @param queue QueueStorage struct from contract.
      */
     function initialize(QueueStorage storage queue) external {
-        queue._first = 1;
-        queue._last = 0;
-    }
-
-    function reset(QueueStorage storage queue) public {
-        for (int256 i = queue._first; i <= queue._last; i++) {
-            delete queue._data[i];
-        }
         queue._first = 1;
         queue._last = 0;
     }
@@ -553,12 +549,6 @@ library Queue {
         queue._data[++queue._last] = data;
     }
 
-    /*function pushFront(QueueStorage storage queue, WhoAmount calldata data)
-        public
-    {
-        queue._data[--queue._first] = data;
-    }*/
-
     /**
      * @dev Removes an element from the front of the queue and returns it. O(1)
      * @param queue QueueStorage struct from contract.
@@ -571,15 +561,6 @@ library Queue {
         data = queue._data[queue._first];
         delete queue._data[queue._first++];
     }
-
-    /*function popBack(QueueStorage storage queue)
-        public
-        isNotEmpty(queue)
-        returns (WhoAmount memory data)
-    {
-        data = queue._data[queue._last];
-        delete queue._data[queue._last--];
-    }*/
 
     /**
      * @dev Returns the data from the front of the queue, without removing it. O(1)
@@ -594,16 +575,4 @@ library Queue {
         return queue._data[queue._first];
     }
 
-    /**
-     * @dev Returns the data from the back of the queue. O(1)
-     * @param queue QueueStorage struct from contract.
-     */
-    /*function peekBack(QueueStorage storage queue)
-        public
-        view
-        isNotEmpty(queue)
-        returns (WhoAmount memory data)
-    {
-        return queue._data[queue._last];
-    }*/
 }

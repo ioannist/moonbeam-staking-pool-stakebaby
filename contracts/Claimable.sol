@@ -35,4 +35,8 @@ contract Claimable {
     function depositClaim(address _delegator) external payable onlyStakingPool {
         claimables[_delegator] += msg.value;
     }
+
+    receive() external payable {
+        revert();
+    }
 }
