@@ -50,7 +50,9 @@ contract StakingPool is ReentrancyGuard {
     mapping(address => uint256) public delegatorToClaims;
 
     // Max LST in circulation
-    uint256 public MAX_LST;
+    uint256 public MAX_LST_SUPPLY;
+    // Max delegation per delegator
+    uint256 public MAX_DELEGATION_LST;
 
     // EVENTS
     event DelegatedToPool(address delegator, uint256 amount, uint256 lstAmount);
@@ -76,6 +78,7 @@ contract StakingPool is ReentrancyGuard {
     event LedgerAutoCompoundSet(address ledger, address candidate, uint8 value);
     event LedgerScheduledRevoke(address ledger, address _candidate);
     event MaxLstSupplySet(uint256 supply);
+    event MaxDelegationLstSet(uint256 maxDelegation);
     
     // Pending undelegation requests {who: delegator, amount: delegation, round}
     Queue.QueueStorage public undelegationQueue;
@@ -124,7 +127,8 @@ contract StakingPool is ReentrancyGuard {
         require(msg.value > 0, "ZERO_PAYMENT");
         // we exclude msg.value from the ratio calculation because the ratio must be calculated based on previous deposits and minted LS tokens
         uint256 toMintLST = (msg.value * lstokenPerUnderlying) / 1 ether;
-        require(toMintLST + tokenLiquidStaking.totalSupply() <= MAX_LST, "MAX_LST");
+        require(toMintLST + tokenLiquidStaking.totalSupply() <= MAX_LST_SUPPLY, "MAX_SUPPLY");
+        require(tokenLiquidStaking.balanceOf(msg.sender) + toMintLST <= MAX_DELEGATION_LST, "MAX");
         pendingDelegation += msg.value;
         emit DelegatedToPool(msg.sender, msg.value, toMintLST);
         tokenLiquidStaking.mintToAddress(msg.sender, toMintLST);
@@ -427,10 +431,15 @@ contract StakingPool is ReentrancyGuard {
         ledger.cancelDelegationRequest(_candidate);
     }
 
-    function setMaxLST(uint256 _maxLST) external onlyCollatorProxy {
+    function setMaxLstSupply(uint256 _maxLST) external onlyCollatorProxy {
         require(_maxLST >= tokenLiquidStaking.totalSupply(), "BELOW_SUPPLY");
-        MAX_LST = _maxLST;
+        MAX_LST_SUPPLY = _maxLST;
         emit MaxLstSupplySet(_maxLST);
+    }
+
+    function setMaxDelegationLst(uint256 _maxDelegation) external onlyCollatorProxy {
+        MAX_DELEGATION_LST = _maxDelegation;
+        emit MaxDelegationLstSet(_maxDelegation);
     }
 
     function setAutoCompound(
