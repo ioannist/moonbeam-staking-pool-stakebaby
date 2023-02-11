@@ -1,6 +1,7 @@
 const StakingPool = artifacts.require("StakingPool");
 const TokenLiquidStaking = artifacts.require("TokenLiquidStaking");
 const Claimable = artifacts.require("Claimable.sol");
+const Queue = artifacts.require("types/Queue.sol");
 
 module.exports = async (deployer, network, accounts) => {
 
@@ -25,17 +26,6 @@ module.exports = async (deployer, network, accounts) => {
     } catch { }
   }
   
-  console.log(`Deploying StakingPool`);
-  let _StakingPool, SP;
-  while (true) {
-    try {
-      await deployer.deploy(StakingPool);
-      SP = await StakingPool.deployed();
-      _StakingPool = SP.address;
-      break;
-    } catch { }
-  }
-
   console.log(`Deploying Claimable`);
   let _Claimable, CA;
   while (true) {
@@ -47,13 +37,36 @@ module.exports = async (deployer, network, accounts) => {
     } catch { }
   }
 
+  console.log(`Deploying Queue`);
+  let _Queue, QU;
+  while (true) {
+    try {
+      await deployer.deploy(Queue);
+      QU = await Queue.deployed();
+      _Queue = QU.address;
+      break;
+    } catch { }
+  }
+  await deployer.link(Queue, StakingPool);
+
+  console.log(`Deploying StakingPool`);
+  let _StakingPool, SP;
+  while (true) {
+    try {
+      await deployer.deploy(StakingPool);
+      SP = await StakingPool.deployed();
+      _StakingPool = SP.address;
+      break;
+    } catch { }
+  }
+
   console.log(`Initializing StakingPool`);
   await SP.initialize(
     _collator,
     _ParachainStaking,
     _TokenLiquidStaking,
     _Claimable,
-    {value: _tokenLiquidStakingInitialSupply}
+    {from: superior, value: _tokenLiquidStakingInitialSupply}
   );
 
   console.log(`Initializing Claimable`);

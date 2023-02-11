@@ -12,7 +12,7 @@ contract Claimable {
     mapping(address => uint256) public claimables;
 
     modifier onlyStakingPool() {
-        require(msg.sender == STAKING_POOL, "NOT_AUTH");
+        require(msg.sender == STAKING_POOL, "NOT_POOL");
         _;
     }
 

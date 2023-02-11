@@ -8,17 +8,24 @@ import {Proxy} from "./interfaces/Proxy.sol";
 import {TokenLiquidStaking} from "./TokenLiquidStaking.sol";
 import {Ledger} from "./Ledger.sol";
 import {Claimable} from "./Claimable.sol";
+import "./types/Queue.sol";
+
+//********************* STAKING POOL *********************/
 
 contract StakingPool is ReentrancyGuard {
+
     //Contract accounts
-    address TOKEN_LIQUID_STAKING;
-    address LEDGER;
-    address payable CLAIMABLE;
+    address public PARACHAIN_STAKING;
+    address public TOKEN_LIQUID_STAKING;
+    address payable public CLAIMABLE;
     // User accounts
-    address COLLATOR;
+    address public COLLATOR;
 
     // If a pending undelegation request takes more than this rounds to be served, then inLiquidation -> true
     uint256 public constant LIQUIDATION_ROUND_THRESHOLD = 12 * 30;
+
+    // Missing ledger index
+    uint256 internal constant N_FOUND = type(uint256).max;
 
     ParachainStaking staking;
     Proxy proxy;
@@ -43,6 +50,8 @@ contract StakingPool is ReentrancyGuard {
     uint256 public pendingDelegation;
     // Buffered incoming undelegation requests
     uint256 public pendingSchedulingUndelegation;
+    // Ledger to candidate to last scheduled request
+    mapping(address => mapping(address => uint256)) internal scheduledRequests;
     // toClaim is the amount of underlying that is excluded from the pool, and has its corresponding LS tokens burnt
     // This amount can be transfered to the claimable contract as soon as it is available in reducible balance
     uint256 public toClaim;
@@ -84,7 +93,7 @@ contract StakingPool is ReentrancyGuard {
     Queue.QueueStorage public undelegationQueue;
 
     modifier onlyCollatorProxy() {
-        require(_isProxy(msg.sender), "NOT_AUTH");
+        require(_isProxy(msg.sender), "NOT_PROXY");
         _;
     }
 
@@ -100,10 +109,11 @@ contract StakingPool is ReentrancyGuard {
             "ALREADY_INIT"
         );
         COLLATOR = _collator;
+        PARACHAIN_STAKING = _parachainStaking;
         TOKEN_LIQUID_STAKING = _tokenLiquidStaking;
         CLAIMABLE = _claimable;
         tokenLiquidStaking = TokenLiquidStaking(TOKEN_LIQUID_STAKING);
-        staking = ParachainStaking(_parachainStaking);
+        staking = ParachainStaking(PARACHAIN_STAKING);
         claimable = Claimable(CLAIMABLE);
         // We must provide the initial underlying capital 1:1
         require(
@@ -127,8 +137,8 @@ contract StakingPool is ReentrancyGuard {
         require(msg.value > 0, "ZERO_PAYMENT");
         // we exclude msg.value from the ratio calculation because the ratio must be calculated based on previous deposits and minted LS tokens
         uint256 toMintLST = (msg.value * lstokenPerUnderlying) / 1 ether;
-        require(toMintLST + tokenLiquidStaking.totalSupply() <= MAX_LST_SUPPLY, "MAX_SUPPLY");
-        require(tokenLiquidStaking.balanceOf(msg.sender) + toMintLST <= MAX_DELEGATION_LST, "MAX");
+        require(tokenLiquidStaking.totalSupply() + toMintLST <= MAX_LST_SUPPLY, "MAX_SUPPLY");
+        require(tokenLiquidStaking.balanceOf(msg.sender) + toMintLST <= MAX_DELEGATION_LST, "MAX_DELEG");
         pendingDelegation += msg.value;
         emit DelegatedToPool(msg.sender, msg.value, toMintLST);
         tokenLiquidStaking.mintToAddress(msg.sender, toMintLST);
@@ -164,7 +174,7 @@ contract StakingPool is ReentrancyGuard {
         toClaim += toWithdraw;
         delegatorToClaims[msg.sender] += toWithdraw;
         emit ScheduledUndelegateFromPool(msg.sender, toWithdraw, _amountLST);
-        tokenLiquidStaking.burnFromAddress(msg.sender, _amountLST);
+        tokenLiquidStaking.burnFromAddress(msg.sender, _amountLST);        
     }
 
     //********************* PUBLIC MAINTENANCE METHODS *********************/
@@ -184,13 +194,11 @@ contract StakingPool is ReentrancyGuard {
     OR  if the collator is no longer a registered candidqte, then activate inLiquidation.
     */
     function activateInLiquidation() external {
-        bool undelegationThresholdReached = Queue
-            .peekFront(undelegationQueue)
+        bool undelegationThresholdReached = Queue.peek(undelegationQueue)
             .round +
             LIQUIDATION_ROUND_THRESHOLD <
             staking.round();
-        bool isNotCandidate = !staking.isCandidate(COLLATOR);
-        require(undelegationThresholdReached || isNotCandidate, "COND_NOT_MET");
+        require(undelegationThresholdReached, "COND_NOT_MET");
         emit InLiquidationActivated();
         inLiquidation = true;
     }
@@ -221,11 +229,14 @@ contract StakingPool is ReentrancyGuard {
     */
     function executeUndelegations(uint256 _maxCount) external nonReentrant {
         uint256 amounts;
-        for (uint256 i = 0; i <= _maxCount; i++) {
+        for (uint256 i = 0; i < _maxCount; i++) {
+            if (Queue.isEmpty(undelegationQueue)) {
+                break;
+            }
             // We exclude pendingDelegation because we have not decided how to allocate it yet
             uint256 availableToClaim = address(this).balance -
                 pendingDelegation; // guaranteed non-zero because pendingDelegation is a subgroup of reducible balance
-            if (Queue.peekFront(undelegationQueue).amount > availableToClaim) {
+            if (Queue.peek(undelegationQueue).amount > availableToClaim) {
                 break;
             }
             Queue.WhoAmount memory whoAmount = Queue.popFront(
@@ -252,6 +263,10 @@ contract StakingPool is ReentrancyGuard {
         pendingDelegation += msg.value;
     }
 
+    function depositFromLedger() external payable {
+        require(_getLedgerIndex(msg.sender) != N_FOUND, "NOT_LEDGER");
+    }
+
     function addLedger() external onlyCollatorProxy returns (address) {
         return _addLedger();
     }
@@ -261,7 +276,7 @@ contract StakingPool is ReentrancyGuard {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         address ledger = ledgers[_ledgerIndex];
         require(
-            staking.delegationAmount(ledger, COLLATOR) == 0,
+            staking.getDelegatorTotalStaked(ledger) == 0,
             "DELEGATION_NOT_ZERO"
         );
         require(address(ledger).balance == 0, "BALANCE_NOT_ZERO");
@@ -273,7 +288,7 @@ contract StakingPool is ReentrancyGuard {
 
     function deactivateInLiquidation() external onlyCollatorProxy {
         require(
-            Queue.peekFront(undelegationQueue).round +
+            Queue.peek(undelegationQueue).round +
                 LIQUIDATION_ROUND_THRESHOLD >=
                 staking.round(),
             "COND_NOT_MET"
@@ -409,6 +424,7 @@ contract StakingPool is ReentrancyGuard {
         pendingSchedulingUndelegation -= _amount;
         address _ledger = ledgers[_ledgerIndex];
         Ledger ledger = Ledger(payable(_ledger));
+        scheduledRequests[_ledger][_candidate] = _amount;
         emit LedgerBondLess(address(ledger), _candidate, _amount);
         ledger.scheduleDelegatorBondLess(_candidate, _amount);
     }
@@ -426,7 +442,10 @@ contract StakingPool is ReentrancyGuard {
     {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         require(!uncompliance, "IN_UNCOMPLIANCE");
-        Ledger ledger = Ledger(ledgers[_ledgerIndex]);
+        address _ledger = ledgers[_ledgerIndex];
+        Ledger ledger = Ledger(_ledger);
+        pendingSchedulingUndelegation += scheduledRequests[_ledger][_candidate];
+        delete scheduledRequests[_ledger][_candidate];
         emit LedgerCancelDelegationRequest(address(ledger), _candidate);
         ledger.cancelDelegationRequest(_candidate);
     }
@@ -494,7 +513,7 @@ contract StakingPool is ReentrancyGuard {
     }
 
     function _addLedger() internal returns (address) {
-        Ledger ledger = new Ledger();
+        Ledger ledger = new Ledger(PARACHAIN_STAKING, payable(address(this)));
         ledgers.push(payable(address(ledger)));
         emit AddedLedger(address(ledger));
         return address(ledger);
@@ -516,10 +535,11 @@ contract StakingPool is ReentrancyGuard {
     {
         require(_ledgerIndex < ledgers.length, "INV_INDEX");
         address _ledger = ledgers[_ledgerIndex];
-        uint256 amount = staking.delegationAmount(_ledger, COLLATOR);
+        uint256 amount = staking.delegationAmount(_ledger, _candidate);
         require(amount <= pendingSchedulingUndelegation, "INV_AMOUNT");
         pendingSchedulingUndelegation -= amount;
         Ledger ledger = Ledger(payable(_ledger));
+        scheduledRequests[_ledger][_candidate] = amount;
         emit LedgerScheduledRevoke(_ledger, _candidate);
         ledger.scheduleRevokeDelegation(_candidate);
     }
@@ -547,95 +567,19 @@ contract StakingPool is ReentrancyGuard {
         return poolFunds;
     }
 
+    function _getLedgerIndex(address _ledger) internal view returns (uint256) {
+        uint256 length = ledgers.length;
+        for (uint256 i = 0; i < length; ++i) {
+            if (ledgers[i] == _ledger) {
+                return i;
+            }
+        }
+        return N_FOUND;
+    }
+
     function _isProxy(address _manager) internal view virtual returns (bool) {
         return proxy.isProxy(COLLATOR, _manager, Proxy.ProxyType.Governance, 0);
     }
 
 }
 
-//********************* QUEUE *********************/
-
-library Queue {
-    struct WhoAmount {
-        address who;
-        uint256 amount;
-        uint256 round;
-    }
-
-    struct QueueStorage {
-        mapping(int256 => WhoAmount) _data;
-        int256 _first;
-        int256 _last;
-    }
-
-    modifier isNotEmpty(QueueStorage storage queue) {
-        require(!isEmpty(queue), "Queue is empty.");
-        _;
-    }
-
-    /**
-     * @dev Sets the queue's initial state, with a queue size of 0.
-     * @param queue QueueStorage struct from contract.
-     */
-    function initialize(QueueStorage storage queue) external {
-        queue._first = 1;
-        queue._last = 0;
-    }
-
-    /**
-     * @dev Gets the number of elements in the queue. O(1)
-     * @param queue QueueStorage struct from contract.
-     */
-    function length(QueueStorage storage queue) public view returns (uint256) {
-        if (queue._last < queue._first) {
-            return 0;
-        }
-        return uint256(queue._last - queue._first + 1); // always positive
-    }
-
-    /**
-     * @dev Returns if queue is empty. O(1)
-     * @param queue QueueStorage struct from contract.
-     */
-    function isEmpty(QueueStorage storage queue) public view returns (bool) {
-        return length(queue) == 0;
-    }
-
-    /**
-     * @dev Adds an element to the back of the queue. O(1)
-     * @param queue QueueStorage struct from contract.
-     * @param data The added element's data.
-     */
-    function pushBack(QueueStorage storage queue, WhoAmount calldata data)
-        public
-    {
-        queue._data[++queue._last] = data;
-    }
-
-    /**
-     * @dev Removes an element from the front of the queue and returns it. O(1)
-     * @param queue QueueStorage struct from contract.
-     */
-    function popFront(QueueStorage storage queue)
-        public
-        isNotEmpty(queue)
-        returns (WhoAmount memory data)
-    {
-        data = queue._data[queue._first];
-        delete queue._data[queue._first++];
-    }
-
-    /**
-     * @dev Returns the data from the front of the queue, without removing it. O(1)
-     * @param queue QueueStorage struct from contract.
-     */
-    function peekFront(QueueStorage storage queue)
-        public
-        view
-        isNotEmpty(queue)
-        returns (WhoAmount memory data)
-    {
-        return queue._data[queue._first];
-    }
-
-}

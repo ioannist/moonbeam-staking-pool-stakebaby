@@ -4,25 +4,27 @@ pragma solidity ^0.8.3;
 // Import OpenZeppelin Contract
 import "./interfaces/StakingInterface.sol";
 import "./TokenLiquidStaking.sol";
+import "./StakingPool.sol";
 
 contract Ledger {
 
     address payable STAKING_POOL;
 
     ParachainStaking staking;
+    StakingPool stakingPool;
    
     modifier onlyStakingPool() {
-        require(msg.sender == STAKING_POOL, "NOT_AUTH");
+        require(msg.sender == STAKING_POOL, "NOT_POOL");
         _;
     }
 
-    function initialize(
+    constructor(
         address _parachainStaking,
         address payable _stakingPool
-    ) external {
-        require(_stakingPool != address(0) && STAKING_POOL == address(0), "ALREADY_INIT");
+    ) {
         STAKING_POOL = _stakingPool;
         staking = ParachainStaking(_parachainStaking);
+        stakingPool = StakingPool(STAKING_POOL);
     }
 
     function delegate(address _candidate, uint256 _delegation) external onlyStakingPool {
@@ -89,8 +91,7 @@ contract Ledger {
     }
 
     function withdraw(uint256 _amount) external onlyStakingPool {
-        (bool sent, ) = STAKING_POOL.call{value: _amount}("");
-        require(sent, "EXEC_FAIL");
+        stakingPool.depositFromLedger{value: _amount}();
     }
 
     /**

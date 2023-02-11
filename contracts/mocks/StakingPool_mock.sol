@@ -7,4 +7,8 @@ contract StakingPool_mock is StakingPool {
     function _isProxy(address _manager) internal view override returns(bool) {
         return true;
     }
+
+    function simulateRewards() external payable {
+        
+    }
 }

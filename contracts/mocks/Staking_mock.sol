@@ -340,6 +340,7 @@ contract Staking_mock is ParachainStaking {
     function scheduleRevokeDelegation(address candidate) external {
         require(!scheduledRevoke[msg.sender][candidate], "ALREADY_SCHEDULED");
         scheduledRevoke[msg.sender][candidate] = true;
+        requests[msg.sender] = candidate;
     }
 
     /// @dev Bond more for delegators with respect to a specific collator candidate
@@ -368,6 +369,7 @@ contract Staking_mock is ParachainStaking {
             "BELOW_MIN"
         );
         scheduledBondLess[msg.sender][candidate] = less;
+        requests[msg.sender] = candidate;
     }
 
     /// @dev Execute pending delegation request (if exists && is due)
@@ -395,6 +397,7 @@ contract Staking_mock is ParachainStaking {
             delegations[delegator][candidate] = 0;
             delete scheduledRevoke[delegator][candidate];
         }
+        delete requests[delegator];
     }
 
     /// @dev Cancel pending delegation request (already made in support of input by caller)
