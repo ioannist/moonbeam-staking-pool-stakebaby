@@ -185,7 +185,7 @@ contract StakingPool is ReentrancyGuard {
         });
         Queue.pushBack(undelegationQueue, whoAmount);
         pendingSchedulingUndelegation += toWithdraw;
-        toClaim += toWithdraw;
+        toClaim += toWithdraw; // toClaim funds will be excluded from "underlying" balance until they are moved out to claimable contract
         delegatorToClaims[msg.sender] += toWithdraw;
         emit ScheduledUndelegateFromPool(msg.sender, toWithdraw, _amountLST);
         tokenLiquidStaking.burnFromAddress(msg.sender, _amountLST);

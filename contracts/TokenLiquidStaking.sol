@@ -9,20 +9,16 @@ contract TokenLiquidStaking is ERC20  {
 
     address payable STAKING_POOL;
 
-    constructor(uint256 initialSupply) ERC20("StakeBabyMOVR", "sbMOVR") 
+    constructor(uint256 initialSupply, address payable _stakingPool) ERC20("StakeBabyMOVR", "sbMOVR") 
     {
+        STAKING_POOL = _stakingPool;
         _mint(msg.sender, initialSupply);
     }
 
     // Allows function calls only from StakingPool
     modifier onlyStakingPool() {
-        require(msg.sender == STAKING_POOL);
+        require(msg.sender == STAKING_POOL, "NOT_POOL");
         _;
-    }
-
-    function initialize(address payable _stakingPool) external  {
-        require(_stakingPool != address(0) && STAKING_POOL == address(0), "ALREADY_INIT");
-        STAKING_POOL = _stakingPool;
     }
 
     function mintToAddress(address _to, uint256 _amount) public onlyStakingPool {

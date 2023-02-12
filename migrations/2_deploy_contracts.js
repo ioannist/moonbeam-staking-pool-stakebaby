@@ -15,28 +15,6 @@ module.exports = async (deployer, network, accounts) => {
 
   const _ParachainStaking = '0x0000000000000000000000000000000000000800';
 
-  console.log(`Deploying TokenLiquidStaking`);
-  let _TokenLiquidStaking, TLS;
-  while (true) {
-    try {
-      await deployer.deploy(TokenLiquidStaking, _tokenLiquidStakingInitialSupply);
-      TLS = await TokenLiquidStaking.deployed();
-      _TokenLiquidStaking = TLS.address;
-      break;
-    } catch { }
-  }
-  
-  console.log(`Deploying Claimable`);
-  let _Claimable, CA;
-  while (true) {
-    try {
-      await deployer.deploy(Claimable);
-      CA = await Claimable.deployed();
-      _Claimable = CA.address;
-      break;
-    } catch { }
-  }
-
   console.log(`Deploying Queue`);
   let _Queue, QU;
   while (true) {
@@ -60,6 +38,28 @@ module.exports = async (deployer, network, accounts) => {
     } catch { }
   }
 
+  console.log(`Deploying TokenLiquidStaking`);
+  let _TokenLiquidStaking, TLS;
+  while (true) {
+    try {
+      await deployer.deploy(TokenLiquidStaking, _tokenLiquidStakingInitialSupply, _StakingPool);
+      TLS = await TokenLiquidStaking.deployed();
+      _TokenLiquidStaking = TLS.address;
+      break;
+    } catch { }
+  }
+  
+  console.log(`Deploying Claimable`);
+  let _Claimable, CA;
+  while (true) {
+    try {
+      await deployer.deploy(Claimable, _StakingPool);
+      CA = await Claimable.deployed();
+      _Claimable = CA.address;
+      break;
+    } catch { }
+  }
+
   console.log(`Initializing StakingPool`);
   await SP.initialize(
     _collator,
@@ -69,13 +69,6 @@ module.exports = async (deployer, network, accounts) => {
     {from: superior, value: _tokenLiquidStakingInitialSupply}
   );
 
-  console.log(`Initializing Claimable`);
-
-  await CA.initialize(_StakingPool)
-
-  console.log(`Initializing TokenLiquidStaking`)
-  await TLS.initialize(_StakingPool);
-  
   console.log('Finished deploying and intializing contracts')
 
   console.log("Contracts created:")

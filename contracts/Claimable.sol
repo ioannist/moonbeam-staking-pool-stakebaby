@@ -16,11 +16,7 @@ contract Claimable {
         _;
     }
 
-    function initialize(address _stakingPool) external payable {
-        require(
-            _stakingPool != address(0) && STAKING_POOL == address(0),
-            "ALREADY_INIT"
-        );
+    constructor(address _stakingPool) payable {
         STAKING_POOL = _stakingPool;
     }
 
