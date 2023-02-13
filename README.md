@@ -9,16 +9,19 @@ These contracts are located in the [contracts/](contracts/) directory.
 
 ### [StakingPool](contracts/StakingPool.sol)
 Staking pool business logic. The pool manages/accesses all other contracts and accepts the funds from delegators.
+https://moonbeam.moonscan.io/address/0xE48Df88bD2855ab27FA29d433E0DE6BeD0F2C1a8
 
 ### [Ledger](contracts/Ledger.sol)
 Acts as a solo smart contract delegator for delegating funds to collators. Multiple ledgers are required to efficiently manage the delegation portfolio.
+Ledgers are created and destroyed by the pool contract. You can query ledger addresses by querying the public ledgers array of the StakingPool contract.
 
 ### [TokenLiquidStaking](contracts/TokenLiquidStaking.sol)
 The Liquid Staking token that is issued in exchange for underlying (GLMR or MOVR).
+https://moonbeam.moonscan.io/token/0x2e506923a408e308E75ef4BE574681197f2a6460
 
 ### [Claimable](contracts/Claimable.sol)
 A contract dedicated to withdrawals of scheduled+executed undelegations.
-
+https://moonbeam.moonscan.io/address/0x9bf0F6222fFdD01C36339df8E757EF105C9447Fe
 
 ## Quick start
 ### Install dependencies
