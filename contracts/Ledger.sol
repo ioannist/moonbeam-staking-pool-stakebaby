@@ -27,6 +27,18 @@ contract Ledger {
         stakingPool = StakingPool(STAKING_POOL);
     }
 
+    function getBalance() external view returns(uint256) {
+        return address(this).balance;
+    }
+
+    function getDelegatorTotalStaked() external view returns(uint256) {
+        return staking.getDelegatorTotalStaked(address(this));
+    }
+
+    function getDelegationAmount(address _candidate) external view returns(uint256) {
+        return staking.delegationAmount(address(this), _candidate);
+    }
+
     function delegate(address _candidate, uint256 _delegation) external onlyStakingPool {
         staking.delegate(
                 _candidate,

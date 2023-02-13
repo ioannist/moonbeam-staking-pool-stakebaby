@@ -6,10 +6,8 @@ const HDWalletProvider = require('@truffle/hdwallet-provider');
 // NOTE: Do not store your private key in plaintext files
 //       this is only for demostration purposes only
 const privateKeysMoonbase = [
-   process.env.TEST_1,
-   process.env.TEST_1,
-   process.env.TEST_1,
-   process.env.TEST_1,
+   process.env.MOONBASE_KEY,
+   process.env.MOONBASE_MANAGER,
 ];
 
 const privateKeysMoonriver = [
@@ -17,6 +15,11 @@ const privateKeysMoonriver = [
    process.env.TEST_1,
    process.env.TEST_1,
    process.env.TEST_1,
+];
+
+const privateKeysMoonbeam = [
+   process.env.MOONBEAM_KEY,
+   process.env.MOONBEAM_MANAGER
 ];
 
 const privateKeys = [
@@ -66,6 +69,17 @@ module.exports = {
          network_id: 1285,
          networkCheckTimeout: 60000,
          timeoutBlocks: 200
+      },
+      moonbeam1: {
+         provider: () => {
+            return new HDWalletProvider({
+               privateKeys: privateKeysMoonbeam,
+               providerOrUrl:  'https://moonbeam.public.blastapi.io' //'https://moonbeam.unitedbloc.com:3000'
+            });
+         },
+         network_id: 1284,
+         //networkCheckTimeout: 60000,
+         //timeoutBlocks: 200
       },
    },
    // Solidity 0.8.2 Compiler

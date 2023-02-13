@@ -11,6 +11,9 @@ contract Claimable {
     // Delegator claimable amounts
     mapping(address => uint256) public claimables;
 
+    event Claimed(address delegator, uint256 amount);
+    event ClaimDeposit(address delegator, uint256 amount);
+
     modifier onlyStakingPool() {
         require(msg.sender == STAKING_POOL, "NOT_POOL");
         _;
@@ -24,12 +27,13 @@ contract Claimable {
         uint256 amount = claimables[_delegator];
         require(amount > 0, "ZERO_CLAIM");
         claimables[_delegator] = 0;
+        emit Claimed(_delegator, amount);
         (bool sent, ) = _delegator.call{value: amount}("");
         require(sent, "TRANSFER_FAIL");
     }
 
     function depositClaim(address _delegator) external payable onlyStakingPool {
+        emit ClaimDeposit(_delegator, msg.value);
         claimables[_delegator] += msg.value;
     }
-
 }

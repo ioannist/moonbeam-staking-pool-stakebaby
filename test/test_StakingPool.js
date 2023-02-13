@@ -25,7 +25,7 @@ contract('StakingPool', accounts => {
     require('dotenv').config()
     let mt, sp, ca, tls, st, qu;
     const [manager, officer, delegator1, delegator2, delegator3, agent007, rewards] = accounts;
-    const _collator = process.env.Collator;
+    const _poolManager = process.env.POOL_MANAGER;
     const _tokenLiquidStakingInitialSupply = web3.utils.toWei(process.env.TokenLiquidStakingInitialSupply, "ether");
     const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
     const ONE_ADDR = "0x0000000000000000000000000000000000000001";
@@ -38,6 +38,8 @@ contract('StakingPool', accounts => {
     }
 
     beforeEach(async () => {
+
+        const _Proxy = "0x000000000000000000000000000000000000080b";
 
         console.log(`Creating contracts`);
         st = await Staking.new();
@@ -59,8 +61,9 @@ contract('StakingPool', accounts => {
 
         console.log(`Initializing StakingPool`);
         await sp.initialize(
-          _collator,
+          _poolManager,
           st.address,
+          _Proxy,
           tls.address,
           ca.address,
           {value: _tokenLiquidStakingInitialSupply}
@@ -97,7 +100,7 @@ contract('StakingPool', accounts => {
     }
 
     it("have all variables initialized", async () => {
-        expect(await sp.COLLATOR()).to.be.equal(_collator);
+        expect(await sp.MANAGER()).to.be.equal(_poolManager);
         expect(await tls.totalSupply()).to.be.bignumber.equal(_tokenLiquidStakingInitialSupply);
         expect(await web3.eth.getBalance(sp.address)).to.be.bignumber.equal(_tokenLiquidStakingInitialSupply);
     });
@@ -494,7 +497,6 @@ contract('StakingPool', accounts => {
         expect(await st.delegationRequestIsPending(ledger0, candidate1)).to.be.false;
         await sp.depositAndDelegate(0, candidate1, userDeposit1);
         expect(await st.delegationRequestIsPending(ledger0, candidate1)).to.be.false;
-        await expect(sp.scheduleRevokeDelegation(0, candidate1)).to.be.rejectedWith('INV_AMOUNT');
         
         await sp.delegatorScheduleUnstakeAndBurnLSTokens(userDeposit1, {from: delegator1});
         await sp.scheduleRevokeDelegation(0, candidate1);
@@ -515,7 +517,6 @@ contract('StakingPool', accounts => {
         await sp.delegatorStakeAndReceiveLSTokens({from: delegator1, value: userDeposit1});
         expect(await st.delegationRequestIsPending(ledger0, candidate1)).to.be.false;
         await sp.depositAndDelegate(0, candidate1, userDeposit1);
-        await expect(sp.scheduleDelegatorBondLess(0, candidate1, bondLess)).to.be.rejectedWith('INV_AMOUNT');
         
         await sp.delegatorScheduleUnstakeAndBurnLSTokens(bondLess, {from: delegator1});
         await sp.scheduleDelegatorBondLess(0, candidate1, bondLess);

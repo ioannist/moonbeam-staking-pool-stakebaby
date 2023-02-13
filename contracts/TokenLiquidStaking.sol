@@ -9,7 +9,7 @@ contract TokenLiquidStaking is ERC20  {
 
     address payable STAKING_POOL;
 
-    constructor(uint256 initialSupply, address payable _stakingPool) ERC20("StakeBabyMOVR", "sbMOVR") 
+    constructor(uint256 initialSupply, address payable _stakingPool) ERC20("MamaGLMR", "mamaGLMR") 
     {
         STAKING_POOL = _stakingPool;
         _mint(msg.sender, initialSupply);
