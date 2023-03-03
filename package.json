@@ -16,10 +16,12 @@
     "prettier-plugin-solidity": "^1.1.0",
     "solc": "^0.8.17",
     "truffle": "^5.5.13",
-    "truffle-flattener": "^1.6.0",
-    "truffle-plugin-verify": "^0.5.25"
+    "truffle-flattener": "^1.6.0"
   },
   "scripts": {
     "prettier": "prettier --write \"contracts/**/*.sol\""
+  },
+  "devDependencies": {
+    "truffle-plugin-verify": "^0.6.1"
   }
 }
